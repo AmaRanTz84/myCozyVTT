@@ -18,12 +18,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
-const root = join(__dirname, '..', '..');
-const headers = readFileSync(join(root, 'security-headers.conf'), 'utf8');
-const siteConfig = readFileSync(join(root, 'nginx.conf'), 'utf8');
+// Imported as text rather than read with fs: this project has no Node types,
+// and a test is not a reason to add a dependency to the whole frontend.
+import headers from '../../security-headers.conf?raw';
+import siteConfig from '../../nginx.conf?raw';
 
 /** The Content-Security-Policy value, as one string. */
 const csp = (() => {
@@ -95,10 +93,10 @@ describe('the site config', () => {
   it('includes the headers in every location, because nginx does not inherit them', () => {
     const blocks = siteConfig.match(/location[^{]*\{[^}]*\}/g) ?? [];
     expect(blocks.length).toBeGreaterThanOrEqual(4);
-    for (const block of blocks) {
-      const name = block.slice(0, block.indexOf('{')).trim();
-      expect(`${name}: ${block.includes(include)}`).toBe(`${name}: true`);
-    }
+    const missing = blocks
+      .filter((block) => !block.includes(include))
+      .map((block) => block.slice(0, block.indexOf('{')).trim());
+    expect(missing).toEqual([]);
   });
 
   it('still serves the SPA fallback', () => {
