@@ -888,6 +888,12 @@ any lights, all placed for you.
 with several levels comes as one file per level, and each one becomes its own
 map in CozyVTT. That is how the format works everywhere, not a CozyVTT limit.
 
+**Furniture walls.** Some tools keep the walls for furniture, pillars and
+crates apart from the room walls. They block sight the same way a wall does, so
+whether a table should hide what is behind it is your call: when a file has
+them, the import asks, and leaving the box unticked means only the architecture
+blocks sight.
+
 **If CozyVTT asks "Some walls sit outside this map's picture".** The file
 describes walls in places its own picture does not reach. That normally means
 the tool that exported it cropped the picture to part of the map but wrote out
