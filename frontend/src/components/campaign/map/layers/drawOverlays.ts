@@ -10,6 +10,7 @@ import { calcGridDistance } from '@/utils/geometry';
 import type { Viewport } from './types';
 import { mapPxToFogCell } from '../coords';
 import { fogRectFromDrag, fogRectToPx, fogRectSize } from '../fogSelection';
+import type { SelectionRect } from '../mapSelection';
 
 type Pt = { x: number; y: number };
 
@@ -548,6 +549,58 @@ export function drawAoEOverlay(
   ctx.textAlign = 'start';
 
   ctx.restore();
+}
+
+export interface WallSelectionOverlayState {
+  /** The box being dragged out, in map pixels, or null when none is. */
+  marquee: SelectionRect | null;
+  /** Walls currently selected, drawn so a gathered set is visible as one. */
+  selectedWallIds: ReadonlySet<string>;
+  wallSegments: WallSegment[];
+}
+
+/**
+ * The wall selection box, and a ring around everything it has caught.
+ *
+ * Dashed and unsnapped, unlike the fog box: a wall can sit anywhere between
+ * grid lines, so the box has to be able to as well.
+ */
+export function drawWallSelection(
+  ctx: CanvasRenderingContext2D,
+  viewport: Viewport,
+  state: WallSelectionOverlayState
+): void {
+  const { zoom } = viewport;
+
+  if (state.selectedWallIds.size > 0) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.95)';
+    ctx.lineWidth = 6 / zoom;
+    ctx.lineCap = 'round';
+    for (const seg of state.wallSegments) {
+      if (!state.selectedWallIds.has(seg.id)) continue;
+      ctx.beginPath();
+      ctx.moveTo(seg.x1, seg.y1);
+      ctx.lineTo(seg.x2, seg.y2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if (state.marquee) {
+    const { minX, minY, maxX, maxY } = state.marquee;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+    ctx.lineWidth = 1.5 / zoom;
+    ctx.setLineDash([4 / zoom, 3 / zoom]);
+    ctx.beginPath();
+    ctx.rect(minX, minY, maxX - minX, maxY - minY);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
 }
 
 export interface FogSelectionState {
