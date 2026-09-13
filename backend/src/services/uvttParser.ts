@@ -79,6 +79,25 @@ export interface UVTTParseResult {
   portalCount: number;
   /** Number of light sources */
   lightCount: number;
+  /**
+   * Geometry that lies outside the map image.
+   *
+   * A UVTT holds one image and the geometry that belongs with it. Some
+   * exporters crop the image to part of the map and write out the geometry for
+   * all of it, which imports as a map with bare areas and walls that cannot do
+   * anything, since sight is clipped to the map's own edges. Counting it lets
+   * the import say so before the DM is left wondering.
+   *
+   * A wall counts only when both of its ends are outside; one end over the line
+   * is how a building meets the edge of its own picture.
+   */
+  outOfBounds: UVTTOutOfBounds;
+}
+
+export interface UVTTOutOfBounds {
+  walls: number;
+  doors: number;
+  lights: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -90,6 +109,11 @@ function normalizeColor(raw: unknown, fallback: string): string {
   if (typeof raw !== 'string') return fallback;
   const m = HEX_COLOR_RE.exec(raw.trim());
   return m ? `#${m[1].toLowerCase()}` : fallback;
+}
+
+/** Whether a point in grid units falls outside the map image. */
+function isOutside(p: { x: number; y: number }, mapWidth: number, mapHeight: number): boolean {
+  return p.x < 0 || p.y < 0 || p.x > mapWidth || p.y > mapHeight;
 }
 
 // ── Parser ─────────────────────────────────────────────────────────────────────
@@ -153,6 +177,7 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
   // ── Convert line_of_sight polylines → WallSegments ─────────────────────────
   const wallSegments: WallSegment[] = [];
   let wallCount = 0;
+  const outOfBounds: UVTTOutOfBounds = { walls: 0, doors: 0, lights: 0 };
 
   for (const polyline of data.line_of_sight) {
     if (!Array.isArray(polyline) || polyline.length < 2) continue;
@@ -172,6 +197,9 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
         type: 'wall',
       });
       wallCount++;
+      if (isOutside(a, mapWidth, mapHeight) && isOutside(b, mapWidth, mapHeight)) {
+        outOfBounds.walls++;
+      }
     }
   }
 
@@ -196,6 +224,9 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
         type: portal.closed === false ? 'door-open' : 'door-closed',
       });
       portalCount++;
+      if (isOutside(a, mapWidth, mapHeight) && isOutside(b, mapWidth, mapHeight)) {
+        outOfBounds.doors++;
+      }
     }
   }
 
@@ -223,6 +254,9 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
         enabled: true,
       });
       lightCount++;
+      if (isOutside(light.position, mapWidth, mapHeight)) {
+        outOfBounds.lights++;
+      }
     }
   }
 
@@ -242,5 +276,6 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
     wallCount,
     portalCount,
     lightCount,
+    outOfBounds,
   };
 }
