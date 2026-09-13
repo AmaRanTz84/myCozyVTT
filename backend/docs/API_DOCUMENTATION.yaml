@@ -6524,6 +6524,13 @@ paths:
         A file with more wall segments or lights than a map can hold is refused
         with **400**, because import used to write past the limits every later
         edit enforces, leaving a map that could not be saved.
+
+
+        The embedded picture is checked by its bytes, not by what the file
+        claims: anything that is not a map image is refused, as is one over the
+        `MAX_MAP_SIZE_MB` limit. A thumbnail is generated, and the route counts
+        against the upload rate limit, since it writes a file to disk exactly
+        as an upload does.
       operationId: importUvttMap
       security:
         - cookieAuth: []
