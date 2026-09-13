@@ -27,7 +27,8 @@ interface UVTTPoint {
 }
 
 interface UVTTResolution {
-  map_origin: UVTTPoint;
+  /** Where this picture sits in the source map's grid space. Often absent. */
+  map_origin?: UVTTPoint;
   map_size: UVTTPoint;      // grid dimensions (columns × rows)
   pixels_per_grid: number;
 }
@@ -50,6 +51,8 @@ interface UVTTFile {
   format?: number;
   resolution: UVTTResolution;
   line_of_sight: UVTTPoint[][];
+  /** Walls belonging to objects: furniture, pillars, crates. Dungeondraft 1.0+. */
+  objects_line_of_sight?: UVTTPoint[][];
   portals?: UVTTPortal[];
   lights?: unknown[];
   image: string;              // base64-encoded image data
@@ -80,6 +83,12 @@ export interface UVTTParseResult {
   /** Number of light sources */
   lightCount: number;
   /**
+   * Wall segments the file keeps in `objects_line_of_sight`: furniture,
+   * pillars, crates. Counted whether or not they were imported, so the import
+   * can offer them. Included in `wallCount` only when they were asked for.
+   */
+  objectWallCount: number;
+  /**
    * Geometry that lies outside the map image.
    *
    * A UVTT holds one image and the geometry that belongs with it. Some
@@ -104,11 +113,49 @@ export interface UVTTOutOfBounds {
 
 const HEX_COLOR_RE = /^#?([0-9a-fA-F]{6})$/;
 
-/** Normalize a color string to #rrggbb format, or return the default. */
+/**
+ * Eight digits, which UVTT writes as AARRGGBB: alpha first, then the colour.
+ *
+ * Dropping the leading pair is what the reference importers do. Taking the
+ * trailing pair instead would silently return a different colour, so the two
+ * patterns are kept apart rather than folded into one loose match.
+ */
+const ARGB_COLOR_RE = /^#?[0-9a-fA-F]{2}([0-9a-fA-F]{6})$/;
+
+/**
+ * Normalize a color string to #rrggbb, or return the default.
+ *
+ * CozyVTT lights carry no alpha of their own, so an alpha channel is read and
+ * discarded rather than folded into the colour.
+ */
 function normalizeColor(raw: unknown, fallback: string): string {
   if (typeof raw !== 'string') return fallback;
-  const m = HEX_COLOR_RE.exec(raw.trim());
+  const trimmed = raw.trim();
+  const m = HEX_COLOR_RE.exec(trimmed) ?? ARGB_COLOR_RE.exec(trimmed);
   return m ? `#${m[1].toLowerCase()}` : fallback;
+}
+
+/** How a caller wants the file read. */
+export interface UVTTParseOptions {
+  /**
+   * Bring in the walls belonging to objects. Off by default: they block sight
+   * like any other wall, but whether a table or a crate should is the DM's
+   * call, so the import asks rather than deciding.
+   */
+  includeObjectWalls?: boolean;
+}
+
+/**
+ * Move a point out of the source map's grid space and into the picture's.
+ *
+ * UVTT coordinates are absolute in the map the picture was taken from, and
+ * `map_origin` says where the picture starts. An export of a whole map leaves
+ * the origin at 0,0 and this changes nothing; an export of a region does not,
+ * and without this every wall lands `map_origin` squares away from where it
+ * belongs.
+ */
+function toPictureSpace(p: UVTTPoint, origin: UVTTPoint): UVTTPoint {
+  return { x: p.x - origin.x, y: p.y - origin.y };
 }
 
 /** Whether a point in grid units falls outside the map image. */
@@ -124,7 +171,11 @@ function isOutside(p: { x: number; y: number }, mapWidth: number, mapHeight: num
  * @param fileBuffer  The raw file contents (JSON text)
  * @param gridSizePx  CozyVTT grid size in pixels (default 70)
  */
-export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTParseResult {
+export function parseUVTT(
+  fileBuffer: Buffer,
+  gridSizePx: number = 70,
+  options: UVTTParseOptions = {}
+): UVTTParseResult {
   // Parse the JSON
   let data: UVTTFile;
   try {
@@ -150,6 +201,24 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
   const mapWidth  = Math.round(data.resolution.map_size.x);
   const mapHeight = Math.round(data.resolution.map_size.y);
   const ppg       = data.resolution.pixels_per_grid || 140;
+
+  // Absent on most files, and zero on a whole-map export. See toPictureSpace.
+  const rawOrigin = data.resolution.map_origin;
+  const origin: UVTTPoint = {
+    x: typeof rawOrigin?.x === 'number' ? rawOrigin.x : 0,
+    y: typeof rawOrigin?.y === 'number' ? rawOrigin.y : 0,
+  };
+
+  // The format has been 0.2 or 0.3 in the wild and the fields we read have not
+  // moved between them. A version we have never seen is worth a line in the log
+  // rather than a refusal: the file may well be readable, and refusing outright
+  // would strand a user on a tool that upgraded before we did.
+  if (typeof data.format === 'number' && data.format > 0.3) {
+    logger.warn(
+      `[uvtt-parser] Unfamiliar UVTT format ${data.format}; reading it as 0.3. ` +
+      'Some of the file may be ignored.'
+    );
+  }
 
   logger.info(
     `[uvtt-parser] Parsing UVTT: ${mapWidth}×${mapHeight} grid, ` +
@@ -179,14 +248,27 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
   let wallCount = 0;
   const outOfBounds: UVTTOutOfBounds = { walls: 0, doors: 0, lights: 0 };
 
-  for (const polyline of data.line_of_sight) {
+  const objectWalls = Array.isArray(data.objects_line_of_sight)
+    ? data.objects_line_of_sight
+    : [];
+  const objectWallCount = objectWalls.reduce(
+    (total, polyline) => total + (Array.isArray(polyline) ? Math.max(0, polyline.length - 1) : 0),
+    0
+  );
+  const polylines = options.includeObjectWalls
+    ? [...data.line_of_sight, ...objectWalls]
+    : data.line_of_sight;
+
+  for (const polyline of polylines) {
     if (!Array.isArray(polyline) || polyline.length < 2) continue;
 
     for (let i = 0; i < polyline.length - 1; i++) {
-      const a = polyline[i];
-      const b = polyline[i + 1];
-      if (typeof a?.x !== 'number' || typeof a?.y !== 'number') continue;
-      if (typeof b?.x !== 'number' || typeof b?.y !== 'number') continue;
+      const rawA = polyline[i];
+      const rawB = polyline[i + 1];
+      if (typeof rawA?.x !== 'number' || typeof rawA?.y !== 'number') continue;
+      if (typeof rawB?.x !== 'number' || typeof rawB?.y !== 'number') continue;
+      const a = toPictureSpace(rawA, origin);
+      const b = toPictureSpace(rawB, origin);
 
       wallSegments.push({
         id: randomUUID(),
@@ -210,10 +292,12 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
     for (const portal of data.portals) {
       if (!Array.isArray(portal?.bounds) || portal.bounds.length < 2) continue;
 
-      const a = portal.bounds[0];
-      const b = portal.bounds[1];
-      if (typeof a?.x !== 'number' || typeof a?.y !== 'number') continue;
-      if (typeof b?.x !== 'number' || typeof b?.y !== 'number') continue;
+      const rawA = portal.bounds[0];
+      const rawB = portal.bounds[1];
+      if (typeof rawA?.x !== 'number' || typeof rawA?.y !== 'number') continue;
+      if (typeof rawB?.x !== 'number' || typeof rawB?.y !== 'number') continue;
+      const a = toPictureSpace(rawA, origin);
+      const b = toPictureSpace(rawB, origin);
 
       wallSegments.push({
         id: randomUUID(),
@@ -244,17 +328,18 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
       // bright is half that (matching D&D 5e torch pattern: 20ft bright / 40ft dim).
       const dimR = light.range;
       const brightR = Math.max(0, dimR * 0.5);
+      const position = toPictureSpace(light.position, origin);
       lightSources.push({
         id: randomUUID(),
-        x: Math.round(light.position.x * gridSizePx),
-        y: Math.round(light.position.y * gridSizePx),
+        x: Math.round(position.x * gridSizePx),
+        y: Math.round(position.y * gridSizePx),
         brightRadius: brightR,
         dimRadius: dimR,
         color: normalizeColor(light.color, '#ffcc66'),
         enabled: true,
       });
       lightCount++;
-      if (isOutside(light.position, mapWidth, mapHeight)) {
+      if (isOutside(position, mapWidth, mapHeight)) {
         outOfBounds.lights++;
       }
     }
@@ -276,6 +361,7 @@ export function parseUVTT(fileBuffer: Buffer, gridSizePx: number = 70): UVTTPars
     wallCount,
     portalCount,
     lightCount,
+    objectWallCount,
     outOfBounds,
   };
 }
