@@ -15,6 +15,13 @@ interface DmFogControlsProps {
   onFogModeChange: (mode: FogToolMode) => void;
   onRevealAll: () => void;
   onHideAll: () => void;
+  /**
+   * Called when the panel is folded away, so the tool it holds can be put
+   * down with it. Leaving a fog tool armed behind a closed panel means the
+   * next drag on the map reveals or hides ground with nothing on screen
+   * saying why.
+   */
+  onCollapse?: () => void;
 }
 
 export default function DmFogControls({
@@ -22,10 +29,13 @@ export default function DmFogControls({
   onFogModeChange,
   onRevealAll,
   onHideAll,
+  onCollapse,
 }: DmFogControlsProps) {
   const [confirmRevealAll, setConfirmRevealAll] = useState(false);
   const [confirmHideAll, setConfirmHideAll] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Folded away to begin with, like the other map tools: a DM arriving at the
+  // table wants to see the map, not three open panels over it.
+  const [collapsed, setCollapsed] = useState(true);
 
   const handleRevealAll = () => {
     if (!confirmRevealAll) { setConfirmRevealAll(true); return; }
@@ -44,7 +54,11 @@ export default function DmFogControls({
       {/* Header with collapse toggle */}
       <div
         className="flex items-center justify-between px-2 py-1.5 cursor-pointer hover:bg-stone-700/50 select-none"
-        onClick={() => setCollapsed((c) => !c)}
+        onClick={() => {
+          const next = !collapsed;
+          setCollapsed(next);
+          if (next) onCollapse?.();
+        }}
       >
         <span className="text-xs text-warm-amber/70 font-medium uppercase tracking-wide">Fog of War</span>
         <span className="text-stone-400 text-xs">{collapsed ? '▶' : '▼'}</span>

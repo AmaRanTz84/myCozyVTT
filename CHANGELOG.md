@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The map tool panels start out of the way.** Walls, Lights and Fog of War all opened expanded, covering a good part of the map before you had asked for any of them. They now start folded, and open with a click when you want one
+
+- **Folding a tool panel away puts its tool down.** The Walls and Lights panels already did this; Fog of War did not, so you could arm Reveal, fold the panel, and then change what your players could see with a drag on the map and nothing on screen to explain it. All three behave the same way now
+
 - **An imported map is no longer pitch black for your players.** Importing a UVTT switched dynamic lighting on whenever the file brought walls, and most files bring walls without bringing lights. Walls block sight, so with nothing lighting the rooms the players saw a black map with a small circle around their own token, and the only clue was a setting they had no reason to look for. Lighting now comes on only when the file actually has lights in it. You can still turn it on yourself at any time from the Lights panel
 
 - **Maps imported from a UVTT get the same checks, and a preview, as any other upload.** The picture inside a UVTT was written straight to disk without checking it was an image at all, without the map size limit applying, and without the thumbnail every other map gets, which is why imported maps were the only ones showing no preview in the asset library. Only a campaign's DM could ever reach it, so nothing was open to the world; it was simply the one upload with no checks on it. All four now apply

@@ -3273,6 +3273,10 @@ export default function MapCanvas({ onEditToken }: MapCanvasProps) {
         <DmToolPanelContainer containerRef={containerRef}>
           <DmFogControls
             fogMode={fogMode}
+            onCollapse={() => {
+              setFogMode(null);
+              cancelFogDrag();
+            }}
             onFogModeChange={(mode) => {
               setFogMode(mode);
               // Deactivate wall/light tools when switching to fog tool
