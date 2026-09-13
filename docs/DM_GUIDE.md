@@ -868,6 +868,30 @@ This reduces the old workflow (split wall twice → delete middle segment → dr
 - **Merge points** — In Select mode, click an intermediate point (connecting exactly 2 same-type segments) and click **Merge point** to join them into one straight segment
 - **Split** — Click on a wall segment to add a midpoint
 
+### Selecting and Moving Walls
+
+In **Select** mode you can pick up walls and move them, which is the way to fix
+a wall set that does not line up with its artwork.
+
+| To do this | Do that |
+|---|---|
+| Select one wall | Click it |
+| Add or remove one | **Shift**+click |
+| Select an area | Drag a box over empty space; anything it touches comes with it |
+| Select every wall | **Ctrl+A** (**Cmd+A** on a Mac) |
+| Move what is selected | Drag any of it, or nudge with the **arrow keys** |
+| Move by a whole square | **Shift** + an arrow key |
+| Delete what is selected | **Delete** or **Backspace** |
+| Let go | **Escape** once clears the selection, again puts the tool away |
+
+Changing the wall type applies to everything selected, so a boxful of walls can
+become windows at once. **Ctrl+Z** undoes a move or a delete like any other wall
+edit, and players see the change straight away without reloading.
+
+> **Lining walls up with a map image.** If a map's walls sit beside the artwork
+> instead of on it, usually because the file they came from was cropped, select
+> them all and nudge them into place with Shift and the arrow keys.
+
 ### Drawing Walls Efficiently
 
 1. **Use the brush with snap-to-grid** — The fastest way to trace dungeon walls
@@ -875,6 +899,7 @@ This reduces the old workflow (split wall twice → delete middle segment → dr
 3. **Use doors sparingly** — Every door is an interactive element players can click; use them for actual openable doors, not decorative arches
 4. **Use snap-to-wall for doors/windows** — Much faster than splitting walls manually
 5. **Drag endpoints to fine-tune** — Adjust wall positions without redrawing
+6. **Select and move** — Pick up a wall, a room's worth, or the lot, and move them together (see above)
 
 > **Tip:** Maps created in tools like Dungeondraft or Dungeon Alchemist can be exported as Universal VTT (.uvtt) files, which include wall data directly — no manual wall drawing needed. Use **Import UVTT** instead.
 
