@@ -15,7 +15,16 @@ import { validateTokenShapes, TokenMetadataSchema } from '../validators/tokens';
 import type { WallSegment, FogState, LightSource } from '../types/walls';
 import { parseUVTT } from '../services/uvttParser';
 import { buildUVTT } from '../services/uvttExporter';
-import { getFilePath, ensureDirectory } from '../utils/fileUtils';
+import { fileTypeFromBuffer } from 'file-type';
+import {
+  getFilePath,
+  ensureDirectory,
+  isAllowedMimeType,
+  getFileSizeLimit,
+  ALLOWED_EXTENSIONS,
+} from '../utils/fileUtils';
+import { generateThumbnail } from '../utils/thumbnails';
+import { uploadLimiter } from './assets';
 import sharp from 'sharp';
 import logger from '../utils/logger';
 import { toJson } from '../utils/prisma-json';
@@ -212,6 +221,8 @@ router.get('/', campaignMember, async (req: AuthenticatedRequest, res: Response)
 router.post(
   '/import-uvtt',
   campaignDM,
+  // Writes a file to disk exactly as an upload does, so it shares the ceiling.
+  uploadLimiter,
   uvttUpload.single('file'),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -227,44 +238,95 @@ router.post(
       const gridSizePx = Number(req.body.gridSize) || 70;
 
       // ── Parse the UVTT file ──────────────────────────────────────────────
+      const confirmed = req.body.confirm === 'true' || req.body.confirm === true;
+      const includeObjectWalls =
+        req.body.includeObjectWalls === 'true' || req.body.includeObjectWalls === true;
+
       let parsed;
       try {
-        parsed = parseUVTT(req.file.buffer, gridSizePx);
+        parsed = parseUVTT(req.file.buffer, gridSizePx, { includeObjectWalls });
       } catch (parseErr) {
         const msg = parseErr instanceof Error ? parseErr.message : 'Failed to parse UVTT file';
         return res.status(400).json({ error: 'Parse Error', message: msg });
       }
 
-      // ── Geometry the map image does not cover ────────────────────────────
-      // Some exporters crop the image to part of the map and write out the
-      // geometry for all of it. Importing that gives a map with bare areas and
-      // walls that cannot block sight, since sight stops at the map's edges.
-      // Ask before going ahead. Checked before anything is written, so
-      // declining leaves nothing behind.
+      // ── Anything for the DM to decide before this becomes a map ──────────
+      // Two things can need an answer. Some exporters crop the picture to part
+      // of the map and write out the geometry for all of it, which imports as
+      // bare areas with walls that cannot even block sight, since sight stops
+      // at the map's edges. And a file may carry walls for its furniture, which
+      // block sight like any other but are the DM's call.
+      //
+      // Asked before anything is written, so declining leaves nothing behind.
       const { walls, doors, lights } = parsed.outOfBounds;
-      const confirmed = req.body.confirm === 'true' || req.body.confirm === true;
-      if (!confirmed && (walls > 0 || doors > 0 || lights > 0)) {
+      const hasOutOfBounds = walls > 0 || doors > 0 || lights > 0;
+      const offersObjectWalls = !includeObjectWalls && parsed.objectWallCount > 0;
+      if (!confirmed && (hasOutOfBounds || offersObjectWalls)) {
         return res.status(409).json({
           error: 'Confirmation Required',
           // Clients branch on the code, never the wording.
-          code: 'UVTT_GEOMETRY_OUT_OF_BOUNDS',
-          message:
-            'Some of this file\'s walls and lights sit outside its map image. ' +
-            'That usually means the tool that exported it cropped the picture ' +
-            'but kept the walls for the whole map.',
+          code: 'UVTT_IMPORT_NEEDS_CONFIRMATION',
+          message: 'This file needs a decision before it can be imported.',
           outOfBounds: { walls, doors, lights },
+          objectWalls: parsed.objectWallCount,
+        });
+      }
+
+      // ── Refuse what the map editor could never save ──────────────────────
+      // Import wrote these straight to the row while every later edit checks
+      // them, so an oversized file used to import and then refuse the first
+      // wall edit. Say it here, where it can still be acted on.
+      const wallCheck = WallSegmentsArraySchema.safeParse(parsed.wallSegments);
+      if (!wallCheck.success) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message:
+            `This file has ${parsed.wallSegments.length} wall segments, more than a map can hold. ` +
+            (includeObjectWalls && parsed.objectWallCount > 0
+              ? 'Importing without its furniture walls may bring it under the limit.'
+              : 'Split it into smaller maps in the tool that made it.'),
+        });
+      }
+      const lightCheck = LightSourcesArraySchema.safeParse(parsed.lightSources);
+      if (!lightCheck.success) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: `This file's lights cannot be imported: ${lightCheck.error.issues[0]?.message ?? 'they are outside the limits a map allows'}.`,
+        });
+      }
+
+      // ── Check the picture before it reaches disk ─────────────────────────
+      // This route writes the image itself instead of going through the upload
+      // middleware, so the checks every other upload gets have to be made here
+      // or not at all. Read the bytes rather than trusting the file: a UVTT is
+      // JSON, and the base64 inside it can be anything.
+      const imageType = await fileTypeFromBuffer(parsed.imageBuffer);
+      if (!imageType || !isAllowedMimeType('MAP', imageType.mime)) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message:
+            'The picture inside this file is not an image CozyVTT can use. ' +
+            `Maps must be one of: ${ALLOWED_EXTENSIONS.MAP.join(', ')}.`,
+        });
+      }
+
+      const mapSizeLimit = getFileSizeLimit('MAP');
+      if (parsed.imageBuffer.length > mapSizeLimit) {
+        const limitMB = Math.round(mapSizeLimit / (1024 * 1024));
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: `The picture inside this file is too large. Maps must be smaller than ${limitMB}MB.`,
         });
       }
 
       // ── Save the embedded image as an asset ──────────────────────────────
-      const ext = parsed.imageMimeType === 'image/webp' ? '.webp'
-                : parsed.imageMimeType === 'image/jpeg' ? '.jpg'
-                : '.png';
+      const ext = `.${imageType.ext}`;
       const filename = `${randomUUID()}${ext}`;
       const uploadPath = getFilePath('MAP', 'CAMPAIGN', campaignId);
       await ensureDirectory(uploadPath);
       const filePath = path.join(uploadPath, filename).replace(/\\/g, '/');
       await fs.writeFile(filePath, parsed.imageBuffer);
+      const thumbnailPath = await generateThumbnail(filePath);
 
       // Create asset record
       const asset = await prisma.asset.create({
@@ -275,9 +337,10 @@ router.post(
           campaignId,
           filename,
           originalName: `${mapName}${ext}`,
-          mimeType: parsed.imageMimeType,
+          mimeType: imageType.mime,
           fileSize: parsed.imageBuffer.length,
           filePath,
+          thumbnailPath,
           name: mapName,
           tags: ['uvtt-import'],
         },
@@ -299,7 +362,11 @@ router.post(
           annotations: [],
           wallSegments: toJson(parsed.wallSegments),
           lights: toJson(parsed.lightSources),
-          lightingEnabled: parsed.wallSegments.length > 0, // auto-enable if walls present
+          // Only when the file brings lights of its own. Walls alone used to
+          // turn this on, which handed the DM a map that was black for every
+          // player until they found the setting: walls block sight, and with
+          // nothing lighting the room there is nothing to see.
+          lightingEnabled: parsed.lightSources.length > 0,
         },
       });
 

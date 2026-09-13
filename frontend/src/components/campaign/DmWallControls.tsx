@@ -92,7 +92,9 @@ export default function DmWallControls({
   onCollapse,
 }: DmWallControlsProps) {
   const [confirmClear, setConfirmClear] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Folded away to begin with, like the other map tools: a DM arriving at the
+  // table wants to see the map, not three open panels over it.
+  const [collapsed, setCollapsed] = useState(true);
 
   const handleClearAll = () => {
     if (!confirmClear) { setConfirmClear(true); return; }

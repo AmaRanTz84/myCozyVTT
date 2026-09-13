@@ -6500,14 +6500,37 @@ paths:
         with several levels arrives as one file per level.
 
 
-        When walls or lights in the file fall outside that image, the route
-        answers **409** with `code: UVTT_GEOMETRY_OUT_OF_BOUNDS` and creates
-        nothing, so a caller can ask before going ahead. That happens when the
-        exporting tool cropped the image to part of the map but wrote out the
-        geometry for all of it. Send `confirm=true` to import it anyway; nothing
-        is discarded either way, since it is the image that is incomplete rather
-        than the walls. A wall counts as outside only when both of its ends are,
-        so a wall sitting on the map's edge does not trigger it.
+        `resolution.map_origin` is honoured: an export of a region of a larger
+        map carries coordinates in that map's space, and the origin is
+        subtracted so the geometry lands on the image.
+
+
+        Walls the file keeps in `objects_line_of_sight` (furniture, pillars,
+        crates) are left out unless `includeObjectWalls=true`. They block sight
+        like any other wall, so whether they should is the DM's call.
+
+
+        When the file needs an answer before it can become a map, the route
+        answers **409** with `code: UVTT_IMPORT_NEEDS_CONFIRMATION` and creates
+        nothing. Two things can prompt it: geometry outside the image, which
+        happens when the exporting tool cropped the picture but wrote out the
+        geometry for the whole map; and object walls it can offer. Send
+        `confirm=true` with the answers to go ahead. Nothing is discarded for
+        being out of bounds, since there it is the image that is incomplete and
+        not the walls, and a wall counts as outside only when both of its ends
+        are, so a wall on the map's edge does not trigger it.
+
+
+        A file with more wall segments or lights than a map can hold is refused
+        with **400**, because import used to write past the limits every later
+        edit enforces, leaving a map that could not be saved.
+
+
+        The embedded picture is checked by its bytes, not by what the file
+        claims: anything that is not a map image is refused, as is one over the
+        `MAX_MAP_SIZE_MB` limit. A thumbnail is generated, and the route counts
+        against the upload rate limit, since it writes a file to disk exactly
+        as an upload does.
       operationId: importUvttMap
       security:
         - cookieAuth: []
@@ -6532,8 +6555,14 @@ paths:
                   type: string
                   enum: ['true']
                   description: >-
-                    Import even though some geometry falls outside the map
-                    image. Without it such a file answers 409.
+                    Go ahead with whatever the file raised. Without it such a
+                    file answers 409.
+                includeObjectWalls:
+                  type: string
+                  enum: ['true']
+                  description: >-
+                    Import the walls belonging to objects, from
+                    objects_line_of_sight. Omitted means leave them out.
       responses:
         '201':
           description: Map created, with counts of what was imported
@@ -6545,8 +6574,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           description: >-
-            Walls or lights fall outside the map image. Nothing was created.
-            Resend with `confirm=true` to import anyway.
+            The file needs the DM's answer first. Nothing was created. Resend
+            with `confirm=true`, plus `includeObjectWalls` if it offered them.
           content:
             application/json:
               schema:
@@ -6556,7 +6585,7 @@ paths:
                     type: string
                   code:
                     type: string
-                    enum: [UVTT_GEOMETRY_OUT_OF_BOUNDS]
+                    enum: [UVTT_IMPORT_NEEDS_CONFIRMATION]
                   message:
                     type: string
                   outOfBounds:
@@ -6569,11 +6598,17 @@ paths:
                         type: integer
                       lights:
                         type: integer
+                  objectWalls:
+                    type: integer
+                    description: >-
+                      Wall segments the file keeps for its furniture, offered
+                      but not imported. Zero when it has none.
               example:
                 error: Confirmation Required
-                code: UVTT_GEOMETRY_OUT_OF_BOUNDS
-                message: Some of this file's walls and lights sit outside its map image.
+                code: UVTT_IMPORT_NEEDS_CONFIRMATION
+                message: This file needs a decision before it can be imported.
                 outOfBounds: { walls: 79, doors: 20, lights: 0 }
+                objectWalls: 0
 
   /api/campaigns/{campaignId}/maps/{id}/export-uvtt:
     get:

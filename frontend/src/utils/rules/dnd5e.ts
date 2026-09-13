@@ -15,8 +15,8 @@
  * dice maths on one side only. Edit one, copy it to the other.
  *
  * Rules references: SRD 5.1 "Monsters" (proficiency bonus by challenge rating)
- * and the Basic Rules "Using Ability Scores" (modifier derivation). Both are
- * mirrored in system-docs/Dungeons and Dragons/.
+ * and the Basic Rules "Using Ability Scores" (modifier derivation). Both were
+ * checked against the published text rather than written from memory.
  */
 
 // ---------------------------------------------------------------------------
