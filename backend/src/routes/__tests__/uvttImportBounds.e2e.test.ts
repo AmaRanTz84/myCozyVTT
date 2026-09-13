@@ -205,6 +205,32 @@ describe('a UVTT with more walls than a map can hold', () => {
   });
 });
 
+describe('whether dynamic lighting comes on', () => {
+  it('stays off for a file with walls but no lights', async () => {
+    // Walls alone used to switch it on, which left players looking at a black
+    // map lit only by their own token until the DM worked out why.
+    const res = await importUvtt(TIDY, 'walls-only', { confirm: true });
+    expect(res.status).toBe(201);
+    expect(res.body.map.lightingEnabled).toBe(false);
+  });
+
+  it('comes on when the file brings lights', async () => {
+    const lit = Buffer.from(
+      JSON.stringify({
+        format: 0.3,
+        resolution: { map_origin: { x: 0, y: 0 }, map_size: { x: 10, y: 10 }, pixels_per_grid: 140 },
+        line_of_sight: [square(2, 2)],
+        portals: [],
+        lights: [{ position: { x: 5, y: 5 }, range: 4 }],
+        image: PNG_BASE64,
+      })
+    );
+    const res = await importUvtt(lit, 'lit', { confirm: true });
+    expect(res.status).toBe(201);
+    expect(res.body.map.lightingEnabled).toBe(true);
+  });
+});
+
 describe('who may import', () => {
   it('refuses someone who is not the DM of this campaign', async () => {
     const stranger = await createTestUser({

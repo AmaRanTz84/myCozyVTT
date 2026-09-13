@@ -327,7 +327,11 @@ router.post(
           annotations: [],
           wallSegments: toJson(parsed.wallSegments),
           lights: toJson(parsed.lightSources),
-          lightingEnabled: parsed.wallSegments.length > 0, // auto-enable if walls present
+          // Only when the file brings lights of its own. Walls alone used to
+          // turn this on, which handed the DM a map that was black for every
+          // player until they found the setting: walls block sight, and with
+          // nothing lighting the room there is nothing to see.
+          lightingEnabled: parsed.lightSources.length > 0,
         },
       });
 
