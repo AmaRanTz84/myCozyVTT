@@ -47,7 +47,13 @@ app.set('trust proxy', 1);
 // SECURITY MIDDLEWARE
 // ============================================
 
-// Helmet: sets secure HTTP response headers
+// Helmet: sets secure HTTP response headers.
+//
+// These cover what this process answers, which in the production stack is
+// /api and /socket.io. The app page is served by the frontend container, so
+// its policy lives in frontend/security-headers.conf. The two describe the
+// same application and should be changed together; the page's is the wider of
+// the two, because the themes load Google Fonts and this one never has to.
 app.use(
   helmet({
     contentSecurityPolicy: {
