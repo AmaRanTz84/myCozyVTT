@@ -194,6 +194,14 @@ There's a second catch. Out of the box, the backend and frontend use `expose`, w
 
    You should see `content-type: application/json` and a line like `{"setupCompleted":false,...}`. If you see `content-type: text/html`, your proxy is sending `/api` to the frontend instead of the backend. If you see `502`, nothing is listening where your proxy is pointing — usually step 2 was skipped.
 
+5. **Check the security headers still arrive:**
+
+   ```bash
+   curl -sI https://your-domain.com/ | grep -i -E 'content-security|x-frame'
+   ```
+
+   CozyVTT sets these on the frontend container, so removing the bundled Nginx does not lose them — a proxy passes response headers through by default. If nothing comes back, your proxy is stripping or replacing them; whatever it offers instead needs to allow `https://fonts.googleapis.com` for stylesheets and `https://fonts.gstatic.com` for fonts, or every theme loses its typeface. See `frontend/security-headers.conf` for the policy CozyVTT sends.
+
 ### Option B — Shared Docker network (recommended for Traefik/Caddy)
 
 If your proxy also runs in Docker, this is cleaner: it talks to the containers directly by name, and **no ports need to be opened at all**.
@@ -876,7 +884,7 @@ Before going live:
 - [ ] **Admin MFA** — Admin account has MFA enabled
 - [ ] **Backups tested** — Automated backups configured and a restore drill completed successfully
 - [ ] **Upload isolation** — `backend/uploads/` is served only through authenticated backend endpoints, not directly by the web server
-- [ ] **Security headers** — HSTS, X-Content-Type-Options, X-Frame-Options are set in the Nginx HTTPS block
+- [ ] **Security headers** — CozyVTT sends its own (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) from the container that serves the app page, so they arrive whether you use the bundled Nginx or your own proxy. Confirm with `curl -sI https://your-host/ | grep -i content-security`. If your proxy strips or overwrites response headers, stop doing that. **HSTS is the one you add yourself**, in your HTTPS block — see the commented line in `nginx/nginx.conf`
 - [ ] **Database isolation** — PostgreSQL container uses `expose` (not `ports`); unreachable from outside the Docker network
 - [ ] **Log rotation** — `backend/logs/` directory is being rotated (consider `logrotate` for the host-mounted path)
 - [ ] **OS updates** — A plan exists for keeping the host OS and Docker up to date
