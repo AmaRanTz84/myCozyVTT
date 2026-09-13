@@ -42,7 +42,7 @@ const square = (ox: number, oy: number): Point[] => [
   { x: ox, y: oy },
 ];
 
-function uvttFile(lineOfSight: Point[][]): Buffer {
+function uvttFile(lineOfSight: Point[][], objectsLineOfSight: Point[][] = []): Buffer {
   return Buffer.from(
     JSON.stringify({
       format: 0.3,
@@ -52,6 +52,7 @@ function uvttFile(lineOfSight: Point[][]): Buffer {
         pixels_per_grid: 140,
       },
       line_of_sight: lineOfSight,
+      objects_line_of_sight: objectsLineOfSight,
       portals: [],
       lights: [],
       environment: { baked_lighting: false, ambient_light: '00000000' },
@@ -64,17 +65,27 @@ function uvttFile(lineOfSight: Point[][]): Buffer {
 const TIDY = uvttFile([square(2, 2)]);
 /** One square inside, one well off to the right of the picture. */
 const CROPPED = uvttFile([square(2, 2), square(20, 2)]);
+/** Tidy walls, plus a table's worth of object walls. */
+const WITH_FURNITURE = uvttFile([square(2, 2)], [square(4, 4)]);
 
 let dmId: string;
 let campaignId: string;
 let dm: ReturnType<typeof request.agent>;
 
-const importUvtt = (file: Buffer, name: string, confirm?: boolean) => {
+const importUvtt = (
+  file: Buffer,
+  name: string,
+  opts: { confirm?: boolean; includeObjectWalls?: boolean } = {}
+) => {
   const req = dm
     .post(`/api/campaigns/${campaignId}/maps/import-uvtt`)
     .attach('file', file, `${name}.uvtt`)
     .field('name', name);
-  return confirm === undefined ? req : req.field('confirm', String(confirm));
+  if (opts.confirm !== undefined) req.field('confirm', String(opts.confirm));
+  if (opts.includeObjectWalls !== undefined) {
+    req.field('includeObjectWalls', String(opts.includeObjectWalls));
+  }
+  return req;
 };
 
 const mapCount = () => prisma.map.count({ where: { campaignId } });
@@ -116,7 +127,7 @@ describe('a UVTT with walls outside its picture', () => {
   it('asks first, and creates nothing', async () => {
     const res = await importUvtt(CROPPED, 'cropped');
     expect(res.status).toBe(409);
-    expect(res.body.code).toBe('UVTT_GEOMETRY_OUT_OF_BOUNDS');
+    expect(res.body.code).toBe('UVTT_IMPORT_NEEDS_CONFIRMATION');
     expect(res.body.outOfBounds).toEqual({ walls: 4, doors: 0, lights: 0 });
     expect(await mapCount()).toBe(0);
   });
@@ -128,7 +139,7 @@ describe('a UVTT with walls outside its picture', () => {
   });
 
   it('imports on confirmation, keeping the walls outside too', async () => {
-    const res = await importUvtt(CROPPED, 'cropped', true);
+    const res = await importUvtt(CROPPED, 'cropped', { confirm: true });
     expect(res.status).toBe(201);
     // Both squares: nothing is discarded, the picture is what is incomplete.
     expect(res.body.totalSegments).toBe(8);
@@ -136,13 +147,61 @@ describe('a UVTT with walls outside its picture', () => {
   });
 
   it('still asks when confirm says anything but true', async () => {
-    const res = await importUvtt(CROPPED, 'cropped', false);
+    const res = await importUvtt(CROPPED, 'cropped', { confirm: false });
     expect(res.status).toBe(409);
     expect(await mapCount()).toBe(0);
   });
 
   it('does not ask about a tidy file even when confirmation is offered', async () => {
-    expect((await importUvtt(TIDY, 'tidy', true)).status).toBe(201);
+    expect((await importUvtt(TIDY, 'tidy', { confirm: true })).status).toBe(201);
+  });
+});
+
+describe('a UVTT carrying walls for its furniture', () => {
+  it('asks first, reporting how many there are', async () => {
+    const res = await importUvtt(WITH_FURNITURE, 'furniture');
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('UVTT_IMPORT_NEEDS_CONFIRMATION');
+    expect(res.body.objectWalls).toBe(4);
+    expect(res.body.outOfBounds).toEqual({ walls: 0, doors: 0, lights: 0 });
+    expect(await mapCount()).toBe(0);
+  });
+
+  it('leaves them out when the DM says no', async () => {
+    const res = await importUvtt(WITH_FURNITURE, 'furniture', {
+      confirm: true,
+      includeObjectWalls: false,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.totalSegments).toBe(4);
+  });
+
+  it('brings them in when the DM says yes', async () => {
+    const res = await importUvtt(WITH_FURNITURE, 'furniture', {
+      confirm: true,
+      includeObjectWalls: true,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.totalSegments).toBe(8);
+  });
+
+  it('does not ask again once they were asked for', async () => {
+    // The answer is already in the request, so there is nothing left to decide.
+    const res = await importUvtt(WITH_FURNITURE, 'furniture', { includeObjectWalls: true });
+    expect(res.status).toBe(201);
+    expect(res.body.totalSegments).toBe(8);
+  });
+});
+
+describe('a UVTT with more walls than a map can hold', () => {
+  it('is refused at import, where it can still be acted on', async () => {
+    // 5001 segments: one polyline of 5002 points. The map editor caps at 5000,
+    // so before this check the file imported and then refused the first edit.
+    const long: Point[] = Array.from({ length: 5002 }, (_, i) => ({ x: i % 10, y: 1 }));
+    const res = await importUvtt(uvttFile([long]), 'huge', { confirm: true });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/more than a map can hold/i);
+    expect(await mapCount()).toBe(0);
   });
 });
 
