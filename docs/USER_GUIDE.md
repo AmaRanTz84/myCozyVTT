@@ -587,13 +587,14 @@ Changes preview live as you configure them.
 
 **Custom branding (logo, mascot, favicon)** is not part of the Appearance panel yet. The instance
 already honours custom images — they appear on the login page and across the app, system-wide
-regardless of each user's theme — but there is no upload screen, so a self-hoster sets them one of
-two ways:
+regardless of each user's theme — but there is no upload screen, so a self-hoster sets them by
+**replacing the default images** in `frontend/public/` (`default-logo.png`, `default-mascot.png`,
+`favicon-32.png`, `favicon-192.png`) and rebuilding.
 
-- **Replace the default images** in `frontend/public/` (`default-logo.png`, `default-mascot.png`,
-  `favicon-32.png`, `favicon-192.png`) and rebuild, or
-- **Point the instance at hosted images** by sending `customLogoUrl`, `customMascotUrl` and
-  `customFaviconUrl` to `PUT /api/admin/settings` as URLs
+The branding settings on `PUT /api/admin/settings` name a path this instance serves, such as
+`/default-logo.png`. An address on another website is refused: it would have every visitor's
+browser contact that site before they have even signed in, and the app only displays images it
+serves itself.
 
 An admin upload UI is on the roadmap — see [Future Features](FUTURE_FEATURES.md).
 

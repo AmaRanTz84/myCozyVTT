@@ -7759,12 +7759,24 @@ components:
         customLogoUrl:
           type: string
           nullable: true
+          description: >-
+            A path this instance serves, such as /default-logo.png. An address
+            on another host is refused with 400: the app page's
+            Content-Security-Policy allows images from its own origin only, and
+            an outside image would have every visitor contact that host before
+            signing in. Branding is changed by replacing the files in
+            frontend/public/ and rebuilding.
+          example: /default-logo.png
         customFaviconUrl:
           type: string
           nullable: true
+          description: A path this instance serves. Same rule as customLogoUrl.
+          example: /favicon-32.png
         customMascotUrl:
           type: string
           nullable: true
+          description: A path this instance serves. Same rule as customLogoUrl.
+          example: /default-mascot.png
 
   responses:
     BadRequest:
