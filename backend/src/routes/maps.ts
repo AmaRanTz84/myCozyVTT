@@ -235,6 +235,27 @@ router.post(
         return res.status(400).json({ error: 'Parse Error', message: msg });
       }
 
+      // ── Geometry the map image does not cover ────────────────────────────
+      // Some exporters crop the image to part of the map and write out the
+      // geometry for all of it. Importing that gives a map with bare areas and
+      // walls that cannot block sight, since sight stops at the map's edges.
+      // Ask before going ahead. Checked before anything is written, so
+      // declining leaves nothing behind.
+      const { walls, doors, lights } = parsed.outOfBounds;
+      const confirmed = req.body.confirm === 'true' || req.body.confirm === true;
+      if (!confirmed && (walls > 0 || doors > 0 || lights > 0)) {
+        return res.status(409).json({
+          error: 'Confirmation Required',
+          // Clients branch on the code, never the wording.
+          code: 'UVTT_GEOMETRY_OUT_OF_BOUNDS',
+          message:
+            'Some of this file\'s walls and lights sit outside its map image. ' +
+            'That usually means the tool that exported it cropped the picture ' +
+            'but kept the walls for the whole map.',
+          outOfBounds: { walls, doors, lights },
+        });
+      }
+
       // ── Save the embedded image as an asset ──────────────────────────────
       const ext = parsed.imageMimeType === 'image/webp' ? '.webp'
                 : parsed.imageMimeType === 'image/jpeg' ? '.jpg'

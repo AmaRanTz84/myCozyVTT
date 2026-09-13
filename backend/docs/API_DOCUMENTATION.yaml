@@ -6491,9 +6491,23 @@ paths:
     post:
       tags: [Maps]
       summary: Create a map from a Universal VTT file
-      description: >
+      description: >-
         DM only. Accepts .uvtt, .dd2vtt and .df2vtt, bringing in the image along
         with its wall segments, doors and lights.
+
+
+        A Universal VTT holds a single image, so one file is one map; a dungeon
+        with several levels arrives as one file per level.
+
+
+        When walls or lights in the file fall outside that image, the route
+        answers **409** with `code: UVTT_GEOMETRY_OUT_OF_BOUNDS` and creates
+        nothing, so a caller can ask before going ahead. That happens when the
+        exporting tool cropped the image to part of the map but wrote out the
+        geometry for all of it. Send `confirm=true` to import it anyway; nothing
+        is discarded either way, since it is the image that is incomplete rather
+        than the walls. A wall counts as outside only when both of its ends are,
+        so a wall sitting on the map's edge does not trigger it.
       operationId: importUvttMap
       security:
         - cookieAuth: []
@@ -6514,6 +6528,12 @@ paths:
                   type: string
                 gridSize:
                   type: integer
+                confirm:
+                  type: string
+                  enum: ['true']
+                  description: >-
+                    Import even though some geometry falls outside the map
+                    image. Without it such a file answers 409.
       responses:
         '201':
           description: Map created, with counts of what was imported
@@ -6523,6 +6543,37 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          description: >-
+            Walls or lights fall outside the map image. Nothing was created.
+            Resend with `confirm=true` to import anyway.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum: [UVTT_GEOMETRY_OUT_OF_BOUNDS]
+                  message:
+                    type: string
+                  outOfBounds:
+                    type: object
+                    description: How much of the geometry the image does not cover.
+                    properties:
+                      walls:
+                        type: integer
+                      doors:
+                        type: integer
+                      lights:
+                        type: integer
+              example:
+                error: Confirmation Required
+                code: UVTT_GEOMETRY_OUT_OF_BOUNDS
+                message: Some of this file's walls and lights sit outside its map image.
+                outOfBounds: { walls: 79, doors: 20, lights: 0 }
 
   /api/campaigns/{campaignId}/maps/{id}/export-uvtt:
     get:
