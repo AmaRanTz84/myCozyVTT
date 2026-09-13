@@ -833,22 +833,24 @@ class ApiClient {
   /**
    * Import a Universal VTT file as a new map.
    *
-   * Answers 409 with `UVTT_GEOMETRY_OUT_OF_BOUNDS` when the file's walls or
-   * lights fall outside its map image, having created nothing. Send `confirm`
-   * to go ahead anyway. See MapManager, which is where that is asked.
+   * Answers 409 with `UVTT_IMPORT_NEEDS_CONFIRMATION` when the file needs the
+   * DM's answer first, having created nothing: its walls reach outside its
+   * picture, or it carries walls for its furniture. Send the answer back in
+   * `options`. See MapManager, which is where it is asked.
    */
   async importUVTT(
     campaignId: string,
     file: File,
     name?: string,
     gridSize?: number,
-    confirm?: boolean,
+    options?: { confirm?: boolean; includeObjectWalls?: boolean },
   ): Promise<{ map: Map; wallCount: number; portalCount: number; totalSegments: number; lightCount: number }> {
     const formData = new FormData();
     formData.append('file', file);
     if (name) formData.append('name', name);
     if (gridSize) formData.append('gridSize', String(gridSize));
-    if (confirm) formData.append('confirm', 'true');
+    if (options?.confirm) formData.append('confirm', 'true');
+    if (options?.includeObjectWalls) formData.append('includeObjectWalls', 'true');
     const response = await this.client.post(
       `/api/campaigns/${campaignId}/maps/import-uvtt`,
       formData,

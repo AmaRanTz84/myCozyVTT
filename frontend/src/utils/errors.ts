@@ -70,8 +70,8 @@ export function apiErrorStatus(err: unknown): number | undefined {
  *
  * The backend sends a machine-readable code alongside the wording on responses
  * a client has to act on, so routing on it cannot break when the message is
- * reworded. `PASSWORD_CHANGE_REQUIRED` and `UVTT_GEOMETRY_OUT_OF_BOUNDS` are
- * the ones in use.
+ * reworded. `PASSWORD_CHANGE_REQUIRED` and `UVTT_IMPORT_NEEDS_CONFIRMATION`
+ * are the ones in use.
  */
 export function apiErrorCode(err: unknown): string | undefined {
   const code = errorResponse(err)?.data?.code;
