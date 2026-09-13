@@ -23,7 +23,7 @@ import {
   getSystemSettings,
   updateSystemSettings,
 } from '../services/systemSettings';
-import { sanitizeInput, validateEmail } from '../utils/validation';
+import { sanitizeInput, validateEmail, isSameOriginPath } from '../utils/validation';
 import { hashPassword, sanitizeUser } from '../services/auth';
 import { isSmtpConfigured, sendTestEmail, sendWelcomeEmail, sendInvitationEmail } from '../services/email';
 import { UPLOAD_LIMITS } from '../utils/fileUtils';
@@ -214,14 +214,22 @@ router.put('/settings', async (req, res) => {
     if (typeof fontId === 'string') {
       updateData.fontId = sanitizeInput(fontId).slice(0, 50);
     }
-    if (customLogoUrl !== undefined) {
-      updateData.customLogoUrl = typeof customLogoUrl === 'string' ? customLogoUrl : null;
-    }
-    if (customFaviconUrl !== undefined) {
-      updateData.customFaviconUrl = typeof customFaviconUrl === 'string' ? customFaviconUrl : null;
-    }
-    if (customMascotUrl !== undefined) {
-      updateData.customMascotUrl = typeof customMascotUrl === 'string' ? customMascotUrl : null;
+    // Branding images are files this instance serves. See isSameOriginPath.
+    const branding = {
+      customLogoUrl,
+      customFaviconUrl,
+      customMascotUrl,
+    } satisfies Record<string, unknown>;
+    for (const [field, value] of Object.entries(branding)) {
+      if (value === undefined) continue;
+      if (typeof value === 'string' && value !== '' && !isSameOriginPath(value)) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: `${field} must be a path served by this instance, such as /default-logo.png. Replace the images in frontend/public/ and rebuild to change the branding.`,
+        });
+      }
+      const stored = typeof value === 'string' && value !== '' ? value : null;
+      updateData[field as 'customLogoUrl' | 'customFaviconUrl' | 'customMascotUrl'] = stored;
     }
 
     const settings = await updateSystemSettings(updateData);

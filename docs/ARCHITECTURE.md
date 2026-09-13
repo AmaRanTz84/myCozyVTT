@@ -553,6 +553,29 @@ uploads/
 4. **Sharp** generates a WebP thumbnail (for maps and tokens)
 5. File is moved to its final location; the `Asset` record is created in the database
 
+### Security Headers
+
+Two policies, because two different servers answer. `backend/src/server.ts`
+(helmet) covers what the backend sends, which in the production stack is `/api`
+and `/socket.io`. The app page comes from the frontend container, so its
+headers live in `frontend/security-headers.conf` and travel with it, including
+when a self-hoster removes the bundled proxy and points their own at that
+container. A Content-Security-Policy on a JSON response governs nothing, which
+is why the page had no protection until the second file existed.
+
+The page's policy is the wider of the two: themes load a stylesheet from
+`fonts.googleapis.com` and its fonts from `fonts.gstatic.com`, which the API
+never does. It is strict where it counts, `script-src 'self'` with no
+`unsafe-inline`, which the built page allows because Vite emits no inline
+script. It deliberately omits `upgrade-insecure-requests`, since CozyVTT is
+commonly served over plain HTTP on a home network and that directive would
+break such an instance.
+
+nginx does not inherit `add_header` into a location that sets one of its own,
+and `try_files` routes `/` through the `= /index.html` block, so the headers
+are included per location rather than declared once at server level. A test
+asserts that per block.
+
 ### Serving Audio
 
 Ambient audio is not relayed through the server. The DM's choice is broadcast as

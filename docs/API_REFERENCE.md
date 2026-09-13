@@ -1280,6 +1280,13 @@ Get system configuration settings.
 
 Update system configuration settings.
 
+`customLogoUrl`, `customFaviconUrl` and `customMascotUrl` name a path this
+instance serves, such as `/default-logo.png`. An address on another host is
+refused with `400`: the app page allows images from its own origin only, and an
+outside image would have every visitor's browser contact that host before they
+sign in. Branding is changed by replacing the files in `frontend/public/` and
+rebuilding.
+
 ---
 
 ### `GET /api/admin/backups` *(Admin only)*
