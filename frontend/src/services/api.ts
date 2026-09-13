@@ -830,16 +830,25 @@ class ApiClient {
     return `/api/campaigns/${campaignId}/maps/${mapId}/export-uvtt`;
   }
 
+  /**
+   * Import a Universal VTT file as a new map.
+   *
+   * Answers 409 with `UVTT_GEOMETRY_OUT_OF_BOUNDS` when the file's walls or
+   * lights fall outside its map image, having created nothing. Send `confirm`
+   * to go ahead anyway. See MapManager, which is where that is asked.
+   */
   async importUVTT(
     campaignId: string,
     file: File,
     name?: string,
     gridSize?: number,
+    confirm?: boolean,
   ): Promise<{ map: Map; wallCount: number; portalCount: number; totalSegments: number; lightCount: number }> {
     const formData = new FormData();
     formData.append('file', file);
     if (name) formData.append('name', name);
     if (gridSize) formData.append('gridSize', String(gridSize));
+    if (confirm) formData.append('confirm', 'true');
     const response = await this.client.post(
       `/api/campaigns/${campaignId}/maps/import-uvtt`,
       formData,

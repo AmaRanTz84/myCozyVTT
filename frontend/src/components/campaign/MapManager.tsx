@@ -29,7 +29,8 @@ import EditMapModal from './EditMapModal';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import Button from '@/components/ui/Button';
 import { extractAssetId } from '@/utils/assetUrl';
-import { apiErrorMessage } from '@/utils/errors';
+import { apiErrorCode, apiErrorMessage } from '@/utils/errors';
+import { uvttOutOfBounds, uvttOutOfBoundsMessage } from '@/utils/uvttImport';
 
 interface MapManagerProps {
   isOpen: boolean;
@@ -317,6 +318,15 @@ export default function MapManager({ isOpen, onClose }: MapManagerProps) {
   const uvttInputRef = useRef<HTMLInputElement>(null);
   const [isImportingUVTT, setIsImportingUVTT] = useState(false);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  /**
+   * A UVTT the server would not import without being asked, because its walls
+   * or lights fall outside its map image. Held here so the same file can be
+   * sent again once the DM says go ahead.
+   */
+  const [uvttToConfirm, setUvttToConfirm] = useState<{
+    file: File;
+    outOfBounds: { walls: number; doors: number; lights: number };
+  } | null>(null);
 
   // Fetch maps when the panel opens
   const fetchMaps = useCallback(async () => {
@@ -389,17 +399,13 @@ export default function MapManager({ isOpen, onClose }: MapManagerProps) {
 
   // ---- UVTT import ----
 
-  const handleUVTTImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !campaign?.id) return;
-    // Reset input so the same file can be re-selected
-    e.target.value = '';
-
+  const runUVTTImport = async (file: File, confirm?: boolean) => {
+    if (!campaign?.id) return;
     setIsImportingUVTT(true);
     setError(null);
     setImportSuccess(null);
     try {
-      const result = await mapService.importUVTT(campaign.id, file);
+      const result = await mapService.importUVTT(campaign.id, file, undefined, undefined, confirm);
       setMaps((prev) => [result.map, ...prev]);
       const parts = [`${result.totalSegments} wall segments`];
       if (result.portalCount > 0) parts.push(`${result.portalCount} doors`);
@@ -408,11 +414,33 @@ export default function MapManager({ isOpen, onClose }: MapManagerProps) {
       // Auto-clear success message after 5 seconds
       setTimeout(() => setImportSuccess(null), 5000);
     } catch (err: unknown) {
-      const msg = apiErrorMessage(err) || 'Failed to import UVTT file.';
-      setError(msg);
+      // The file's walls reach outside its picture. Nothing has been created;
+      // ask, and send the same file again if the DM wants it anyway.
+      if (apiErrorCode(err) === 'UVTT_GEOMETRY_OUT_OF_BOUNDS') {
+        const outOfBounds = uvttOutOfBounds(err);
+        if (outOfBounds) {
+          setUvttToConfirm({ file, outOfBounds });
+          return;
+        }
+      }
+      setError(apiErrorMessage(err) || 'Failed to import UVTT file.');
     } finally {
       setIsImportingUVTT(false);
     }
+  };
+
+  const handleUVTTImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !campaign?.id) return;
+    // Reset input so the same file can be re-selected
+    e.target.value = '';
+    await runUVTTImport(file);
+  };
+
+  const handleConfirmUVTTImport = async () => {
+    const pending = uvttToConfirm;
+    setUvttToConfirm(null);
+    if (pending) await runUVTTImport(pending.file, true);
   };
 
   // ---- Map switching ----
@@ -680,6 +708,15 @@ export default function MapManager({ isOpen, onClose }: MapManagerProps) {
           onUpdated={handleUpdated}
         />
       )}
+      <ConfirmDialog
+        isOpen={!!uvttToConfirm}
+        title="Some walls sit outside this map's picture"
+        message={uvttOutOfBoundsMessage(uvttToConfirm?.outOfBounds)}
+        confirmLabel="Import anyway"
+        variant="warning"
+        onConfirm={handleConfirmUVTTImport}
+        onCancel={() => setUvttToConfirm(null)}
+      />
       <ConfirmDialog
         isOpen={!!mapToDelete}
         title="Delete Map"
