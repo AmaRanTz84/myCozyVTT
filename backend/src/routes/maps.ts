@@ -15,7 +15,16 @@ import { validateTokenShapes, TokenMetadataSchema } from '../validators/tokens';
 import type { WallSegment, FogState, LightSource } from '../types/walls';
 import { parseUVTT } from '../services/uvttParser';
 import { buildUVTT } from '../services/uvttExporter';
-import { getFilePath, ensureDirectory } from '../utils/fileUtils';
+import { fileTypeFromBuffer } from 'file-type';
+import {
+  getFilePath,
+  ensureDirectory,
+  isAllowedMimeType,
+  getFileSizeLimit,
+  ALLOWED_EXTENSIONS,
+} from '../utils/fileUtils';
+import { generateThumbnail } from '../utils/thumbnails';
+import { uploadLimiter } from './assets';
 import sharp from 'sharp';
 import logger from '../utils/logger';
 import { toJson } from '../utils/prisma-json';
@@ -212,6 +221,8 @@ router.get('/', campaignMember, async (req: AuthenticatedRequest, res: Response)
 router.post(
   '/import-uvtt',
   campaignDM,
+  // Writes a file to disk exactly as an upload does, so it shares the ceiling.
+  uploadLimiter,
   uvttUpload.single('file'),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -284,15 +295,38 @@ router.post(
         });
       }
 
+      // ── Check the picture before it reaches disk ─────────────────────────
+      // This route writes the image itself instead of going through the upload
+      // middleware, so the checks every other upload gets have to be made here
+      // or not at all. Read the bytes rather than trusting the file: a UVTT is
+      // JSON, and the base64 inside it can be anything.
+      const imageType = await fileTypeFromBuffer(parsed.imageBuffer);
+      if (!imageType || !isAllowedMimeType('MAP', imageType.mime)) {
+        return res.status(400).json({
+          error: 'Validation Error',
+          message:
+            'The picture inside this file is not an image CozyVTT can use. ' +
+            `Maps must be one of: ${ALLOWED_EXTENSIONS.MAP.join(', ')}.`,
+        });
+      }
+
+      const mapSizeLimit = getFileSizeLimit('MAP');
+      if (parsed.imageBuffer.length > mapSizeLimit) {
+        const limitMB = Math.round(mapSizeLimit / (1024 * 1024));
+        return res.status(400).json({
+          error: 'Validation Error',
+          message: `The picture inside this file is too large. Maps must be smaller than ${limitMB}MB.`,
+        });
+      }
+
       // ── Save the embedded image as an asset ──────────────────────────────
-      const ext = parsed.imageMimeType === 'image/webp' ? '.webp'
-                : parsed.imageMimeType === 'image/jpeg' ? '.jpg'
-                : '.png';
+      const ext = `.${imageType.ext}`;
       const filename = `${randomUUID()}${ext}`;
       const uploadPath = getFilePath('MAP', 'CAMPAIGN', campaignId);
       await ensureDirectory(uploadPath);
       const filePath = path.join(uploadPath, filename).replace(/\\/g, '/');
       await fs.writeFile(filePath, parsed.imageBuffer);
+      const thumbnailPath = await generateThumbnail(filePath);
 
       // Create asset record
       const asset = await prisma.asset.create({
@@ -303,9 +337,10 @@ router.post(
           campaignId,
           filename,
           originalName: `${mapName}${ext}`,
-          mimeType: parsed.imageMimeType,
+          mimeType: imageType.mime,
           fileSize: parsed.imageBuffer.length,
           filePath,
+          thumbnailPath,
           name: mapName,
           tags: ['uvtt-import'],
         },

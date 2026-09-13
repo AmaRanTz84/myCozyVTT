@@ -24,7 +24,7 @@ import {
 import { canReadAsset, type AssetAccessFacts, canPlaceAssetAtScope } from '../services/permissions';
 import path from 'path';
 import fs from 'fs';
-import sharp from 'sharp';
+import { generateThumbnail } from '../utils/thumbnails';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -36,7 +36,9 @@ const router = Router();
  * (e.g. a script trying to exhaust storage). Keyed by user id so one user's
  * activity does not penalize others on the same NAT.
  */
-const uploadLimiter = rateLimit({
+// Exported: the UVTT import writes a file to disk the same way, so it shares
+// this ceiling instead of keeping a second one that could drift.
+export const uploadLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: parseInt(process.env.ASSET_UPLOAD_RATE_LIMIT || '30'),
   standardHeaders: true,
@@ -387,25 +389,10 @@ router.post(
         : [];
 
       // Generate thumbnail for images (MAP and TOKEN types)
-      let thumbnailPath: string | null = null;
-      if ((req.assetType === 'MAP' || req.assetType === 'TOKEN') && file.mimetype.startsWith('image/')) {
-        try {
-          const thumbnailFilename = `thumb_${file.filename}`;
-          const thumbnailDir = path.dirname(file.path);
-          thumbnailPath = path.join(thumbnailDir, thumbnailFilename);
-
-          await sharp(file.path)
-            .resize(512, 512, {
-              fit: 'inside', // Maintain aspect ratio
-              withoutEnlargement: true, // Don't upscale small images
-            })
-            .toFile(thumbnailPath);
-        } catch (thumbnailError) {
-          logger.error('Error generating thumbnail', { err: thumbnailError });
-          // Don't fail the upload if thumbnail generation fails
-          thumbnailPath = null;
-        }
-      }
+      const thumbnailPath =
+        (req.assetType === 'MAP' || req.assetType === 'TOKEN') && file.mimetype.startsWith('image/')
+          ? await generateThumbnail(file.path)
+          : null;
 
       // Create asset record in database
       // Normalize paths: convert Windows backslashes to forward slashes so
@@ -421,7 +408,7 @@ router.post(
           mimeType: file.mimetype,
           fileSize: file.size,
           filePath: file.path.replace(/\\/g, '/'),
-          thumbnailPath: thumbnailPath ? thumbnailPath.replace(/\\/g, '/') : null,
+          thumbnailPath,
           name: name || file.originalname,
           description: description || null,
           tags: tagArray,

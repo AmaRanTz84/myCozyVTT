@@ -68,10 +68,15 @@ export interface UVTTParseResult {
   mapHeight: number;
   /** Source file's pixels-per-grid (informational) */
   sourcePixelsPerGrid: number;
-  /** Map image as a Buffer (decoded from base64) */
+  /**
+   * Map image as a Buffer, decoded from the file's base64.
+   *
+   * Deliberately unidentified here. This used to carry a guess from two magic
+   * bytes, with PNG as the silent default, and the import stored that guess as
+   * the asset's type. The import route asks `file-type` instead, so anything
+   * that is not really an image is refused rather than filed as a PNG.
+   */
   imageBuffer: Buffer;
-  /** Image MIME type (best guess from magic bytes) */
-  imageMimeType: string;
   /** Wall segments in pixel coordinates (using the provided gridSizePx) */
   wallSegments: WallSegment[];
   /** Light sources in pixel coordinates */
@@ -234,15 +239,6 @@ export function parseUVTT(
   }
   const imageBuffer = Buffer.from(imageBase64, 'base64');
 
-  // Detect MIME type from magic bytes
-  let imageMimeType = 'image/png';
-  if (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8) {
-    imageMimeType = 'image/jpeg';
-  } else if (imageBuffer[0] === 0x52 && imageBuffer[1] === 0x49) {
-    // RIFF header = WebP
-    imageMimeType = 'image/webp';
-  }
-
   // ── Convert line_of_sight polylines → WallSegments ─────────────────────────
   const wallSegments: WallSegment[] = [];
   let wallCount = 0;
@@ -355,7 +351,6 @@ export function parseUVTT(
     mapHeight,
     sourcePixelsPerGrid: ppg,
     imageBuffer,
-    imageMimeType,
     wallSegments,
     lightSources,
     wallCount,
