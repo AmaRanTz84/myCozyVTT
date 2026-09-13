@@ -878,6 +878,27 @@ This reduces the old workflow (split wall twice → delete middle segment → dr
 
 > **Tip:** Maps created in tools like Dungeondraft or Dungeon Alchemist can be exported as Universal VTT (.uvtt) files, which include wall data directly — no manual wall drawing needed. Use **Import UVTT** instead.
 
+### Importing a Universal VTT file
+
+**Import UVTT** at the top of the Map Library takes a `.uvtt`, `.dd2vtt` or
+`.df2vtt` file and makes a map from it: the picture, the walls, the doors and
+any lights, all placed for you.
+
+**One file is one map.** A Universal VTT holds a single picture, so a dungeon
+with several levels comes as one file per level, and each one becomes its own
+map in CozyVTT. That is how the format works everywhere, not a CozyVTT limit.
+
+**If CozyVTT asks "Some walls sit outside this map's picture".** The file
+describes walls in places its own picture does not reach. That normally means
+the tool that exported it cropped the picture to part of the map but wrote out
+the walls for all of it, which is a fault in that tool rather than in the file
+you chose or in CozyVTT. Import it and everything inside the picture works
+normally; the walls beyond the edge arrive with nothing underneath them, and
+they cannot block sight, because sight stops at the edge of the map. If a whole
+section of your map is missing its artwork, check whether the tool you exported
+from can export that section on its own, or export the map as a PNG instead and
+[add it as an ordinary map](#adding-maps-to-your-campaign).
+
 ### Undo / Redo
 
 Wall edits support full undo/redo:
