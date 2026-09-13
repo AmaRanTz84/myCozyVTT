@@ -210,6 +210,12 @@ docker compose -f docker-compose.dev.yml exec --user root backend npx prisma gen
 
 `--user root` is needed because the images install `node_modules` as a different user from the one the process runs as; without it both commands fail with `EACCES: permission denied`. Rebuilding the image (`docker compose -f docker-compose.dev.yml up --build`) does the same thing more slowly.
 
+### Security headers are production-only
+
+The app page's `Content-Security-Policy` and the other security headers come from the frontend container's nginx (`frontend/security-headers.conf`), which only exists in the production image. The Vite dev server serves its own page with an inline module script for hot reload, so the production policy would stop `npm run dev` working.
+
+The practical consequence: **a CSP violation cannot appear during development**. If you add something that loads from a new host — a font, an image, an API on another domain — check it against `frontend/security-headers.conf`, and test it against a production build before assuming it works. `frontend/src/__tests__/securityHeaders.test.ts` pins the policy's shape but cannot know what your feature loads.
+
 ### Production vs Development at a glance
 
 | | Production (`docker-compose.yml`) | Development (`docker-compose.dev.yml`) |
