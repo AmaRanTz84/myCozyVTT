@@ -231,18 +231,15 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
       data: updateData,
     });
 
-    // A session carries the role and the two permission flags from the moment
-    // it was created and nothing re-reads them, so changing any of them here
-    // would otherwise leave the person holding the access just taken away.
-    // Compared against what was stored, so setting a value to what it already
-    // was does not sign anyone out.
-    const accessChanged =
-      (updateData.platformRole !== undefined && updateData.platformRole !== existingUser.platformRole) ||
-      (updateData.globalAssetManager !== undefined &&
-        updateData.globalAssetManager !== existingUser.globalAssetManager) ||
-      (updateData.templateEditor !== undefined && updateData.templateEditor !== existingUser.templateEditor);
-
-    if (accessChanged) {
+    // The session carries platformRole from the moment it was created and
+    // nothing re-reads it, so a demotion would otherwise leave the person
+    // holding admin until they signed out. Compared against what was stored, so
+    // setting the role to what it already was signs nobody out.
+    //
+    // globalAssetManager and templateEditor are deliberately not session fields
+    // and are read from the database where they are used, so changing one
+    // already takes effect on the next request and needs no sign-out.
+    if (updateData.platformRole !== undefined && updateData.platformRole !== existingUser.platformRole) {
       await destroyUserLoginSessions(id);
     }
 

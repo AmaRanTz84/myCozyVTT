@@ -83,20 +83,6 @@ describe('revoking access ends the sessions already issued', () => {
     expect(destroyed).toHaveBeenCalledWith(targetId);
   });
 
-  it('when the global asset manager flag is taken away', async () => {
-    await prisma.user.update({ where: { id: keeperId }, data: { globalAssetManager: true } });
-    const res = await acting.put(`/api/users/${keeperId}`).send({ globalAssetManager: false });
-    expect(res.status).toBe(200);
-    expect(destroyed).toHaveBeenCalledWith(keeperId);
-  });
-
-  it('when the template editor flag is taken away', async () => {
-    await prisma.user.update({ where: { id: keeperId }, data: { templateEditor: true } });
-    const res = await acting.put(`/api/users/${keeperId}`).send({ templateEditor: false });
-    expect(res.status).toBe(200);
-    expect(destroyed).toHaveBeenCalledWith(keeperId);
-  });
-
   it('when an account is deleted', async () => {
     const res = await acting.delete(`/api/users/${doomedId}`);
     expect(res.status).toBe(200);
@@ -135,10 +121,20 @@ describe('an edit that is not a change of access', () => {
     expect(destroyed).not.toHaveBeenCalled();
   });
 
-  it('leaves them signed in when a flag is set to the value it already had', async () => {
-    await prisma.user.update({ where: { id: keeperId }, data: { templateEditor: false } });
-    const res = await acting.put(`/api/users/${keeperId}`).send({ templateEditor: false });
+  it('leaves them signed in when the role is set to what it already was', async () => {
+    const current = await prisma.user.findUnique({ where: { id: keeperId } });
+    const res = await acting.put(`/api/users/${keeperId}`).send({ platformRole: current!.platformRole });
     expect(res.status).toBe(200);
     expect(destroyed).not.toHaveBeenCalled();
+  });
+
+  it('leaves them signed in when a database-read permission flag changes', async () => {
+    // globalAssetManager and templateEditor are not session fields, so the
+    // change already applies on the next request. Signing the person out would
+    // be a cost with no benefit.
+    const res = await acting.put(`/api/users/${keeperId}`).send({ templateEditor: true });
+    expect(res.status).toBe(200);
+    expect(destroyed).not.toHaveBeenCalled();
+    await prisma.user.update({ where: { id: keeperId }, data: { templateEditor: false } });
   });
 });
