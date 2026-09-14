@@ -619,6 +619,12 @@ Click on your current avatar (or the placeholder) to open the avatar uploader. C
 
 In the **Security** section, enter your current password and your new password (twice, to confirm), then click **Save**.
 
+**Changing your password signs you out everywhere else.** Any other browser or
+device still signed in to your account is signed out straight away; the one you
+are using stays where it is. If you ever think somebody else has got into your
+account, changing your password is what removes them. Turning off MFA does the
+same thing.
+
 ### Multi-Factor Authentication (MFA)
 
 For extra account security, enable **MFA** in the Security section. You'll use an authenticator app (like Google Authenticator, Authy, or 1Password) to scan a QR code. After that, every login will ask for a one-time code.

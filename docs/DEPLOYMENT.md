@@ -679,6 +679,11 @@ Both notice that you are running under Docker and do the work inside the
 database container, so you do **not** need PostgreSQL installed on the host.
 Backups older than 30 days are pruned; set `BACKUP_RETAIN_DAYS` to change that.
 
+**A restore either works completely or changes nothing.** The restore script
+checks the backup file is complete before it touches your database, and loads it
+in a single step that is undone if any part of it fails. A damaged or truncated
+backup stops with your existing data still there, and tells you so.
+
 If you run CozyVTT without Docker, give them a `DATABASE_URL` instead:
 
 ```bash
@@ -694,10 +699,21 @@ The same thing by hand, if you would rather not use the scripts:
 docker compose exec database \
   pg_dump -U cozyvtt cozyvtt | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
 
+# Check the backup file is complete before going near the database
+gzip -t backup_YYYYMMDD_HHMMSS.sql.gz && echo "archive is complete"
+
 # Restore from a backup
 gunzip -c backup_YYYYMMDD_HHMMSS.sql.gz | \
-  docker compose exec -T database psql -U cozyvtt cozyvtt
+  docker compose exec -T database psql -U cozyvtt cozyvtt \
+    -v ON_ERROR_STOP=1 --single-transaction
 ```
+
+> **Keep those last two options if you change this command.** A backup starts by
+> deleting the tables it is about to rewrite. Without `ON_ERROR_STOP=1` psql
+> carries on past a failure and still reports success, and without
+> `--single-transaction` a failure partway through leaves the tables deleted and
+> not replaced. Together they make the restore all or nothing. The restore
+> script already passes both.
 
 ### Automated Daily Backups (cron)
 
