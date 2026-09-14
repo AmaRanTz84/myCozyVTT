@@ -594,6 +594,22 @@ both whole-file and range responses.
 
 The server never parses a document; the defence is in how it is served. `GET /api/assets/documents/:id` chooses the `Content-Type` from the validated extension, never from the stored `mimeType` the uploader supplied, and sends Markdown and text as `text/plain` so a browser never renders a document as HTML. The response carries `X-Content-Type-Options: nosniff` and a `default-src 'none'; sandbox` Content-Security-Policy. The reader renders Markdown with `react-markdown` (raw HTML disabled, `javascript:` and `data:` links stripped, images from any origin but this instance replaced by their alt text so a shared document cannot make readers' browsers call out to another host) and shows PDFs in an `<iframe sandbox="allow-scripts">`, which gives the frame a null origin: it cannot reach the session cookie or call the API. "Open in a new tab" shows a PDF in the browser's own viewer at the app's origin, with the isolation that viewer provides and nothing more; that is the same trust every site with a PDF link extends, and the reason the in-app reader uses a sandboxed frame instead. A read the caller is not allowed answers 404, not 403, so the response cannot confirm the document exists. Text documents are served `Cache-Control: private, no-cache` with an ETag taken from the file, because they can be edited in place; the immutable caching the other asset routes use would hand a reader the old text.
 
+### Serving Images
+
+Maps, tokens and avatars are served with an explicit `Content-Type` from a small
+whitelist of image types (and a PDF, for maps), keyed on the file's extension,
+with `X-Content-Type-Options: nosniff`. Anything whose extension is not on that
+list goes out as `application/octet-stream`, which a browser downloads rather
+than renders. This matters because the extension is not trusted on its own: the
+upload accepts a file by its bytes, so a genuine image can arrive named
+`evil.html`, or a GIF whose header is also valid JavaScript named `x.js`. Two
+things stop that reaching a browser as a page or a script. The upload renames
+the stored file to the extension its validated content calls for, so nothing but
+a real image extension is ever written. And the serving routes send the safe
+type above, so a file already on disk under a bad name is still served as bytes,
+never executed. Both are needed: the first for new uploads, the second for
+anything already stored.
+
 ### Asset Scoping
 
 Assets have three scopes:

@@ -39,6 +39,34 @@ async function startsWithMp3Header(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Rename the stored file so its extension matches the validated content.
+ *
+ * multer writes the file under the name the client chose, and the upload path
+ * applies no extension filter, so a genuine image can arrive as `evil.html` or
+ * a GIF whose header is also valid JavaScript as `x.js`. Left in place, the
+ * serving route hands it back with a Content-Type taken from that extension.
+ * Once the content is known the extension is forced to the canonical one for
+ * it, so nothing but a real image extension is ever stored. Returns the new
+ * on-disk path.
+ */
+async function normalizeStoredExtension(
+  file: Express.Multer.File,
+  detectedExt: string
+): Promise<void> {
+  const wanted = `.${detectedExt.toLowerCase()}`;
+  const current = path.extname(file.path).toLowerCase();
+  if (current === wanted) return;
+
+  const dir = path.dirname(file.path);
+  const base = path.basename(file.filename, path.extname(file.filename));
+  const newFilename = `${base}${wanted}`;
+  const newPath = path.join(dir, newFilename);
+  await fs.rename(file.path, newPath);
+  file.path = newPath;
+  file.filename = newFilename;
+}
+
+/**
  * Validate uploaded file by checking actual MIME type from file content (magic bytes)
  * This prevents users from uploading malicious files with fake extensions
  */
@@ -125,6 +153,10 @@ export async function validateFileType(
       });
       return;
     }
+
+    // The content is known and allowed. Force the stored extension to match it,
+    // so the serving route cannot be told the file is a page or a script.
+    await normalizeStoredExtension(req.file, fileType.ext);
 
     // File is valid, proceed
     next();

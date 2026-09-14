@@ -846,6 +846,41 @@ const DOCUMENT_CONTENT_TYPES: Record<string, string> = {
 };
 
 /**
+ * The Content-Type a map or token image is served with, keyed on its stored
+ * extension. Maps also allow a PDF, which every image type here does not; both
+ * are safe to send with an explicit type. Anything not in this table is served
+ * as bytes to download, so a file that reached disk under a name it should not
+ * have is never handed to the browser as a page or a script.
+ */
+const IMAGE_CONTENT_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.pdf': 'application/pdf',
+};
+
+/**
+ * Send an image asset with an explicit, safe Content-Type. Express would
+ * otherwise pick the type from the file extension, and the extension is not
+ * trusted: the upload path stores whatever name the client sent. A known image
+ * extension is served as that image; anything else goes out as
+ * `application/octet-stream`, which the browser downloads rather than renders.
+ * `nosniff` stops the browser second-guessing either way.
+ */
+function sendImageAsset(res: Response, filePath: string): void {
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = IMAGE_CONTENT_TYPES[ext] ?? 'application/octet-stream';
+  res.sendFile(filePath, {
+    headers: {
+      'Content-Type': contentType,
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
+/**
  * GET /api/assets/documents/:id
  * Serve a document (PDF, text or Markdown) for reading inline.
  * Requires: authentication, and read access to the asset
@@ -967,7 +1002,7 @@ router.get('/maps/:id', authenticated, async (req: AuthenticatedRequest, res: Re
 
     // Send file with appropriate content type
     if (handleAssetCaching(req, res, asset.id)) return;
-    return res.sendFile(mapPath);
+    return sendImageAsset(res, mapPath);
   } catch (error) {
     logger.error('Error serving map', { err: error });
     return res.status(500).json({
@@ -1013,7 +1048,7 @@ router.get('/tokens/:id', authenticated, async (req: AuthenticatedRequest, res: 
 
     // Send file with appropriate content type
     if (handleAssetCaching(req, res, asset.id)) return;
-    return res.sendFile(tokenPath);
+    return sendImageAsset(res, tokenPath);
   } catch (error) {
     logger.error('Error serving token', { err: error });
     return res.status(500).json({
@@ -1148,7 +1183,7 @@ router.get('/avatars/:userId', authenticated, async (req: AuthenticatedRequest, 
     // resolve to the newest upload, so they are not immutable — short max-age
     // plus ETag revalidation keeps them fresh without a full re-download.
     if (handleAssetCaching(req, res, asset.id, { immutable: false })) return;
-    return res.sendFile(avatarPath);
+    return sendImageAsset(res, avatarPath);
   } catch (error) {
     logger.error('Error serving avatar', { err: error });
     return res.status(500).json({
