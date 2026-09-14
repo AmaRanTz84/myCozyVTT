@@ -10,6 +10,7 @@ import {
   broadcastToUser,
   broadcastToCampaign,
   applyRoleToLiveSockets,
+  clearCampaignFromLiveSockets,
 } from '../websocket/utils';
 import { isSmtpConfigured, sendCampaignInvitationEmail } from '../services/email';
 import { DEFAULT_VIBE_SETTINGS, validateVibeSettings, findVibePeriod, preserveAtmosphereAudio, VibeSettings } from '../utils/vibe-presets';
@@ -850,6 +851,16 @@ router.delete('/:campaignId/members/:userId', campaignDM, async (req: Authentica
       },
     });
 
+    // A socket caches the campaign from when it authenticated, so without this
+    // the person carries on playing until they close the tab. Best-effort: the
+    // membership is already gone and a socket layer that is not up must not
+    // fail the request.
+    try {
+      await clearCampaignFromLiveSockets(userId, campaignId);
+    } catch (error) {
+      logger.error('Member removed but live sockets were not updated', { err: error, userId, campaignId });
+    }
+
     return res.status(200).json({
       message: 'Member removed successfully',
     });
@@ -945,6 +956,15 @@ router.put('/:campaignId/members/:userId/role', campaignDM, async (req: Authenti
         },
       },
     });
+
+    // Same reason as the DM transfer below: a socket caches its role from when
+    // it authenticated, so a demotion has to reach any open connection or the
+    // person keeps what they had until they reload.
+    try {
+      await applyRoleToLiveSockets(userId, campaignId, role);
+    } catch (error) {
+      logger.error('Member role updated but live sockets were not', { err: error, userId, campaignId });
+    }
 
     return res.status(200).json({
       message: 'Member role updated successfully',
