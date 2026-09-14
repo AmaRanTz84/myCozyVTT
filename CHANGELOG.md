@@ -6,7 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.4.0] — 2026-09-13
+
+### Upgrading from 1.3.0
+
+Nothing to do beyond the usual upgrade, and nothing you have is changed or
+removed. The upgrade adds two new, empty database tables (one for saved dice
+macros, one for documents shared with a campaign); they are created
+automatically on the first startup after you pull, and no existing table is
+touched. Back up first as always — see [Database Backups](docs/DEPLOYMENT.md#database-backups) — then rebuild and restart:
+
+```bash
+git pull origin main
+docker compose up -d --build
+```
+
+**One new optional setting.** `MAX_DOCUMENT_SIZE_MB` sets the largest document a
+DM can upload and defaults to **50 MB** if you do not set it, so you can ignore
+it unless you want a different limit. It lives beside the other size limits
+under **Admin → Settings → Upload Size Limits**. Rulebooks are large, so if you
+raise it, raise `NGINX_MAX_BODY_SIZE` to match, or the bundled proxy will reject
+the upload before it reaches CozyVTT.
+
+There is no manual data migration for this release.
+
 
 ### Added
 

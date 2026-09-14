@@ -835,12 +835,15 @@ Database migrations run automatically via `prisma migrate deploy` on every start
 
 > **Back up before you upgrade.** See [Database Backups](#database-backups) — one `pg_dump` command, and back up `backend/uploads/` alongside it.
 
-### One-off data migration for this release
+### One-off data migration (only if upgrading from before 1.3.0)
+
+**1.4.0 needs no manual step** — its migrations run automatically and change no
+existing data. This section applies only if you are coming from a version
+**before 1.3.0** and never ran it.
 
 If you have **Pathfinder 2e** characters made from the built-in templates, run
-this once after upgrading so their strikes and class features appear on the
-sheet. It also tidies up D&D 5e sheets, whose features already display without
-it.
+this once so their strikes and class features appear on the sheet. It also
+tidies up D&D 5e sheets, whose features already display without it.
 
 ```bash
 # See what would change, without writing anything
