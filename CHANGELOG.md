@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.4.0] — 2026-09-13
+## [1.4.0] — 2026-09-14
 
 ### Upgrading from 1.3.0
 
