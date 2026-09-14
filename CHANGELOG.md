@@ -47,6 +47,8 @@ There is no manual data migration for this release.
 
 ### Fixed
 
+- **Only the person who controls a token can drag it.** While a token was being dragged, the server passed the moving position along to everyone without checking who was doing the dragging, so any player at the table could take hold of the DM's monster or another player's character and send it skidding across the map on everyone's screen. Spectators could do it too. The position is now checked against who controls the token on every step of the drag, and a spectator who was left holding a token from before can no longer move it at all.
+
 - **Removing someone from a campaign now takes effect straight away.** A player who was removed from a campaign, or whose role was changed, kept playing on the connection they already had: still sending chat and dice, still seeing everything happening at the table, until they happened to close the tab. A DM removing someone disruptive had no way to make it stick. Both now reach open connections at once. Handing over the DM seat already worked this way. If the person is in other campaigns, those are not affected.
 
 - **Changing your password now signs out your other devices.** If you thought someone else had got into your account, changing your password did not actually remove them: any session they already had carried on working. Changing your password, or turning off two-factor authentication, now ends every other session on the account. The device you are using stays signed in, so you are not interrupted.
