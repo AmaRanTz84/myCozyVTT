@@ -280,10 +280,30 @@ Two things to get right when adding a check of this kind:
 
 - **Read the flag, do not trust the session.** `templateEditor` and
   `globalAssetManager` are deliberately not session fields, so a permission
-  change takes effect immediately rather than after the next sign-in.
+  change takes effect immediately rather than after the next sign-in. This is
+  also why changing one does not sign anybody out: there is nothing stale to
+  clear.
 - **Branch on `code`, not on the message.** The password-change gate answers with
   a machine-readable `code`; clients route on that, and changing the wording must
   not change behaviour.
+
+### Platform role is the one thing the session carries
+
+`requireAdmin` reads `req.session.platformRole`, which is written at login and
+never re-read, so a demotion leaves the person holding admin over their open
+session. Sessions roll on every response and the client sends a keepalive, so
+one that stays in use does not expire on its own.
+
+`PUT /api/users/:id` therefore calls `destroyUserLoginSessions(id)` when the role
+actually changes, and `DELETE /api/users/:id` calls it too, because the session
+outlives the row it points at and nothing checks the user still exists. The same
+helper ends a user's other sessions on a self-service password change and on
+disabling MFA, with `exceptSessionId` keeping the device making the request
+signed in.
+
+The alternative, re-reading the role from the database on every request the way
+`loadCampaignMembership` does for campaign roles, would also work and is the
+more thorough fix if this ever needs revisiting.
 
 ---
 
@@ -334,13 +354,28 @@ The generic role route still refuses to touch a DM or mint a second one. That is
 intentional: transferring is the only supported way to move the seat, so there is
 one atomic path rather than two.
 
-### Roles change under open sockets
+### Membership changes under open sockets
 
-`socket.role` is read once, when the socket authenticates, and trusted by every
-gated handler after that. A transfer therefore has to update live connections or
-the outgoing DM keeps DM powers until they reload — use
-`applyRoleToLiveSockets(userId, campaignId, role)` from `websocket/utils.ts`.
-REST needs no equivalent; its middleware reads the membership per request.
+`socket.role` and `socket.campaignId` are read once, when the socket
+authenticates, and trusted by every gated handler after that. Anything that
+changes a membership therefore has to reach live connections, or the person
+keeps what they had until they reload. Three routes do, and all three are
+best-effort so a socket layer that is down cannot fail a change already written:
+
+| Route | Helper |
+|---|---|
+| `PUT /api/campaigns/:id/dm` | `applyRoleToLiveSockets(userId, campaignId, role)` for both seats |
+| `PUT /api/campaigns/:id/members/:userId/role` | `applyRoleToLiveSockets(userId, campaignId, role)` |
+| `DELETE /api/campaigns/:id/members/:userId` | `clearCampaignFromLiveSockets(userId, campaignId)` |
+
+`clearCampaignFromLiveSockets` clears the cached campaign and role and leaves the
+room, so the socket can neither act nor listen. Clearing `campaignId` is what
+stops it acting: every handler refuses a socket that is not authenticated to a
+campaign. A socket belongs to one campaign, so somebody playing elsewhere in
+another tab is untouched.
+
+REST needs no equivalent for campaign roles; its middleware reads the membership
+per request. Platform role is a different matter, see below.
 
 ---
 

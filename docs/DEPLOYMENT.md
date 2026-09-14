@@ -679,6 +679,11 @@ Both notice that you are running under Docker and do the work inside the
 database container, so you do **not** need PostgreSQL installed on the host.
 Backups older than 30 days are pruned; set `BACKUP_RETAIN_DAYS` to change that.
 
+**A restore either works completely or changes nothing.** The restore script
+checks the backup file is complete before it touches your database, and loads it
+in a single step that is undone if any part of it fails. A damaged or truncated
+backup stops with your existing data still there, and tells you so.
+
 If you run CozyVTT without Docker, give them a `DATABASE_URL` instead:
 
 ```bash
@@ -694,10 +699,21 @@ The same thing by hand, if you would rather not use the scripts:
 docker compose exec database \
   pg_dump -U cozyvtt cozyvtt | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
 
+# Check the backup file is complete before going near the database
+gzip -t backup_YYYYMMDD_HHMMSS.sql.gz && echo "archive is complete"
+
 # Restore from a backup
 gunzip -c backup_YYYYMMDD_HHMMSS.sql.gz | \
-  docker compose exec -T database psql -U cozyvtt cozyvtt
+  docker compose exec -T database psql -U cozyvtt cozyvtt \
+    -v ON_ERROR_STOP=1 --single-transaction
 ```
+
+> **Keep those last two options if you change this command.** A backup starts by
+> deleting the tables it is about to rewrite. Without `ON_ERROR_STOP=1` psql
+> carries on past a failure and still reports success, and without
+> `--single-transaction` a failure partway through leaves the tables deleted and
+> not replaced. Together they make the restore all or nothing. The restore
+> script already passes both.
 
 ### Automated Daily Backups (cron)
 
@@ -835,12 +851,15 @@ Database migrations run automatically via `prisma migrate deploy` on every start
 
 > **Back up before you upgrade.** See [Database Backups](#database-backups) — one `pg_dump` command, and back up `backend/uploads/` alongside it.
 
-### One-off data migration for this release
+### One-off data migration (only if upgrading from before 1.3.0)
+
+**1.4.0 needs no manual step** — its migrations run automatically and change no
+existing data. This section applies only if you are coming from a version
+**before 1.3.0** and never ran it.
 
 If you have **Pathfinder 2e** characters made from the built-in templates, run
-this once after upgrading so their strikes and class features appear on the
-sheet. It also tidies up D&D 5e sheets, whose features already display without
-it.
+this once so their strikes and class features appear on the sheet. It also
+tidies up D&D 5e sheets, whose features already display without it.
 
 ```bash
 # See what would change, without writing anything

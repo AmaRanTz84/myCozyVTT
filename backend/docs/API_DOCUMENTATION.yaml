@@ -67,7 +67,7 @@ info:
     Real-time campaign features (token movement, dice, chat, initiative, etc.) use Socket.io.
     See the WebSocket section at the bottom of this document for the full event reference.
 
-  version: 1.3.0
+  version: 1.4.0
   contact:
     name: CozyVTT
     url: https://cozyvtt.com
@@ -521,7 +521,7 @@ paths:
       tags:
         - Authentication
       summary: Change own password
-      description: Change password for the authenticated user. Requires current password verification. Sets mustChangePassword to false.
+      description: Change password for the authenticated user. Requires current password verification. Sets mustChangePassword to false. Ends the user's other login sessions; the session making the request stays signed in.
       operationId: changePassword
       security:
         - cookieAuth: []
@@ -683,7 +683,7 @@ paths:
       tags:
         - MFA
       summary: Disable MFA
-      description: Disable MFA for the authenticated user. Requires current password and a valid TOTP code. Admin accounts cannot disable MFA.
+      description: Disable MFA for the authenticated user. Requires current password and a valid TOTP code. Admin accounts cannot disable MFA. Ends the user's other login sessions; the session making the request stays signed in.
       operationId: mfaDisable
       security:
         - cookieAuth: []
@@ -953,7 +953,7 @@ paths:
       tags:
         - Users
       summary: Update user
-      description: Update user profile (own profile or admin). Admin can change platformRole.
+      description: Update user profile (own profile or admin). Admin can change platformRole, which ends every login session the target has, because the role is carried in the session. The globalAssetManager and templateEditor flags are read from the database at the point of use, so changing those takes effect on the next request and does not sign anyone out.
       operationId: updateUser
       security:
         - cookieAuth: []
@@ -1005,7 +1005,7 @@ paths:
       tags:
         - Users
       summary: Delete user
-      description: Delete user account (Admin only, cannot delete self)
+      description: Delete user account (Admin only, cannot delete self). Ends every login session the deleted user had.
       operationId: deleteUser
       security:
         - cookieAuth: []
@@ -1504,7 +1504,7 @@ paths:
       tags:
         - Campaigns
       summary: Remove member
-      description: Remove a member from campaign (DM only, cannot remove DM)
+      description: Remove a member from campaign (DM only). The sitting DM and the campaign owner cannot be removed; both return 400.
       operationId: removeMember
       security:
         - cookieAuth: []
@@ -4752,7 +4752,7 @@ paths:
     get:
       tags: [Creatures]
       summary: Get creature template
-      description: Get a single creature template by ID. Any campaign member can view.
+      description: Get a single creature template by ID. Any campaign member can view a creature belonging to this campaign, or a global SRD creature. A creature belonging to another campaign answers 404.
       operationId: getCreature
       security:
         - cookieAuth: []
@@ -4860,7 +4860,7 @@ paths:
     post:
       tags: [Creatures]
       summary: Duplicate creature
-      description: Duplicate any creature (including SRD) as a new custom creature in this campaign (DM only).
+      description: Duplicate a creature of this campaign, or a global SRD creature, as a new custom creature in this campaign (DM only). A creature belonging to another campaign answers 404.
       operationId: duplicateCreature
       security:
         - cookieAuth: []
@@ -4914,7 +4914,7 @@ paths:
     post:
       tags: [Creatures]
       summary: Toggle creature favorite
-      description: Toggle favorite for the current user in this campaign. If already favorited, removes it; otherwise adds it.
+      description: Toggle favorite for the current user in this campaign. If already favorited, removes it; otherwise adds it. Only a creature of this campaign or a global SRD creature can be favorited; another campaign's answers 404.
       operationId: toggleCreatureFavorite
       security:
         - cookieAuth: []
@@ -6643,6 +6643,9 @@ paths:
       description: >
         Platform ADMIN only. Replaces the database and the uploaded files from
         an archive downloaded earlier. Needs psql present in the backend image.
+        The database load runs as a single transaction and stops at the first
+        failed statement, so an archive that cannot be applied in full leaves
+        the existing database unchanged and answers 500.
       operationId: restoreBackup
       security:
         - cookieAuth: []

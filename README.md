@@ -266,7 +266,7 @@ Built by other people, on their own terms. They are not part of CozyVTT, are not
 
 A note on building things like this. CozyVTT's HTTP and WebSocket surfaces are **not a public API**: they are what the web client calls, they are not versioned, and they carry no compatibility promise, so they can change in any release. They *can* be driven by a program — signing in with your own email and password returns a session cookie that authenticates both, and a script can do exactly what the web client does, as that user with that user's permissions. Unsupported is the honest word for it, not impossible.
 
-That is why `cozyvtt-mcp` pins to a CozyVTT version and keeps a compatibility table. At the time of writing it targets **v1.2.2**, and 1.3.0 changed enough of the API that you should check its table before pairing the two.
+That is why `cozyvtt-mcp` pins to a CozyVTT version and keeps a compatibility table. Check that table before pairing the two: the surface it builds on is unversioned and can change in any release.
 
 ---
 

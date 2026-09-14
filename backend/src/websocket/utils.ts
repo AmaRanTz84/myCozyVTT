@@ -227,3 +227,40 @@ export async function applyRoleToLiveSockets(
 
   return updated;
 }
+
+/**
+ * Cut a user's live connections to one campaign.
+ *
+ * Removing someone from a campaign, like changing their role, leaves any socket
+ * they already have authenticated for it. The handlers read the campaign and
+ * the role from the socket, so without this they keep sending and keep
+ * receiving every broadcast until they close the tab.
+ *
+ * Clearing `campaignId` is what stops them acting: every handler refuses a
+ * socket that is not authenticated to a campaign. Leaving the room is what
+ * stops them listening. A socket authenticates to one campaign, so a person
+ * playing elsewhere in another tab is left alone.
+ *
+ * @returns number of connections closed off
+ */
+export async function clearCampaignFromLiveSockets(
+  userId: string,
+  campaignId: string
+): Promise<number> {
+  const io = getSocketInstance();
+  const sockets = await io.in(userId).fetchSockets();
+
+  let cleared = 0;
+  for (const socket of sockets) {
+    const authed = socket as unknown as { campaignId?: string; role?: string };
+    if (authed.campaignId === campaignId) {
+      socket.leave(campaignId);
+      authed.campaignId = undefined;
+      authed.role = undefined;
+      socket.emit('error', { message: 'You are no longer a member of this campaign' });
+      cleared += 1;
+    }
+  }
+
+  return cleared;
+}

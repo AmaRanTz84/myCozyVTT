@@ -548,6 +548,15 @@ The Campaign Roster in the left sidebar gives you a real-time view of all player
 
 To remove a player from your campaign, open **Campaign Settings** and find the player in the roster. Use the remove option to kick them from the campaign.
 
+**It takes effect at once**, even if they are in the session at that moment.
+They stop being able to chat, roll or move anything, and stop seeing what the
+rest of the table is doing, without waiting for them to close the page.
+
+Two people cannot be removed: whoever is currently the DM, and whoever owns the
+campaign. If you were handed the DM seat by the owner, they stay at the table as
+a player and you cannot remove them. Hand the seat back if you want to step away
+(see [Handing the game to someone else](#handing-the-game-to-someone-else)).
+
 ### Character Assignment
 
 Players assign their own characters to your campaign when they accept an invitation. If a player needs to swap characters (e.g., death, retirement, trying a new one), they can reassign from their Characters page, or you can coordinate with them.

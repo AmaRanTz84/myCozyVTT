@@ -231,6 +231,18 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
       data: updateData,
     });
 
+    // The session carries platformRole from the moment it was created and
+    // nothing re-reads it, so a demotion would otherwise leave the person
+    // holding admin until they signed out. Compared against what was stored, so
+    // setting the role to what it already was signs nobody out.
+    //
+    // globalAssetManager and templateEditor are deliberately not session fields
+    // and are read from the database where they are used, so changing one
+    // already takes effect on the next request and needs no sign-out.
+    if (updateData.platformRole !== undefined && updateData.platformRole !== existingUser.platformRole) {
+      await destroyUserLoginSessions(id);
+    }
+
     return res.status(200).json({
       message: 'User updated successfully',
       user: sanitizeUser(updatedUser),
@@ -393,6 +405,10 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: Request, res: Respo
     await prisma.user.delete({
       where: { id },
     });
+
+    // The session outlives the row it refers to, and the guards read the
+    // session, so it has to go too.
+    await destroyUserLoginSessions(id);
 
     return res.status(200).json({
       message: 'User deleted successfully',

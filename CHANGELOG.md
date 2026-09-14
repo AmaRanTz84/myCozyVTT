@@ -6,7 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.4.0] — 2026-09-14
+
+### Upgrading from 1.3.0
+
+Nothing to do beyond the usual upgrade, and nothing you have is changed or
+removed. The upgrade adds two new, empty database tables (one for saved dice
+macros, one for documents shared with a campaign); they are created
+automatically on the first startup after you pull, and no existing table is
+touched. Back up first as always — see [Database Backups](docs/DEPLOYMENT.md#database-backups) — then rebuild and restart:
+
+```bash
+git pull origin main
+docker compose up -d --build
+```
+
+**One new optional setting.** `MAX_DOCUMENT_SIZE_MB` sets the largest document a
+DM can upload and defaults to **50 MB** if you do not set it, so you can ignore
+it unless you want a different limit. It lives beside the other size limits
+under **Admin → Settings → Upload Size Limits**. Rulebooks are large, so if you
+raise it, raise `NGINX_MAX_BODY_SIZE` to match, or the bundled proxy will reject
+the upload before it reaches CozyVTT.
+
+There is no manual data migration for this release.
+
 
 ### Added
 
@@ -23,6 +46,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **A roll of your own, from your own token.** Right-clicking a creature has always offered the DM a **Custom Roll** box for anything its stat block does not cover — a falling rock, an improvised save, a homebrew effect. Right-clicking your *own* character offered only what the sheet could work out, so anything else meant leaving the token, switching to the Dice tab, and typing it there. That box now sits at the foot of your character's roll menu, below the skills and attacks, and it is pinned rather than buried — you do not have to scroll past a long skill list to reach it. Because the roll comes from your character's menu it is **filed under your character**, which the Dice tab cannot do unless you type the name in yourself: "Bramble Nettlefoot — Falling rock" rather than your own name with nothing to say who it was for. Both menus now draw this control from one place, so they cannot drift apart again
 
 ### Fixed
+
+- **Updated the image library that makes map and token previews.** The version CozyVTT used had known flaws in the code that reads GIF images, which anyone able to upload a token could have reached. It is updated to a fixed version. Nothing about your images changes, and GIF tokens work exactly as before.
+
+- **Only the person who controls a token can drag it.** While a token was being dragged, the server passed the moving position along to everyone without checking who was doing the dragging, so any player at the table could take hold of the DM's monster or another player's character and send it skidding across the map on everyone's screen. Spectators could do it too. The position is now checked against who controls the token on every step of the drag, and a spectator who was left holding a token from before can no longer move it at all.
+
+- **Removing someone from a campaign now takes effect straight away.** A player who was removed from a campaign, or whose role was changed, kept playing on the connection they already had: still sending chat and dice, still seeing everything happening at the table, until they happened to close the tab. A DM removing someone disruptive had no way to make it stick. Both now reach open connections at once. Handing over the DM seat already worked this way. If the person is in other campaigns, those are not affected.
+
+- **Changing your password now signs out your other devices.** If you thought someone else had got into your account, changing your password did not actually remove them: any session they already had carried on working. Changing your password, or turning off two-factor authentication, now ends every other session on the account. The device you are using stays signed in, so you are not interrupted.
+
+- **Taking away someone's access now takes effect at once.** An administrator's powers were read from their sign-in and never checked again, so removing someone's admin rights, withdrawing their permission to manage shared assets or templates, or deleting their account entirely changed nothing for them until they happened to sign out. Someone being removed for behaving badly kept every power they had for as long as they left the tab open. Any of those changes now ends the sessions they already have, so they are signed out immediately. Editing your own profile, such as changing your display name, does not sign you out.
+
+- **Homebrew creatures stay in the campaign they were made for.** A creature you build belongs to one campaign, but anyone running a campaign of their own could ask for another table's creature by its id and get the whole stat block back, then keep a copy of it in their own campaign. Those ids are not secret: every monster placed on a map carries one. Creatures from another campaign are now treated as though they do not exist, and a copy someone had already saved to their favourites is no longer shown. The creatures that come with CozyVTT are shared by everyone as before, and nothing changes inside your own campaign.
+
+- **A failed restore no longer empties your database.** Restoring a backup replaces everything you have, so the file it reads from starts by deleting your existing tables. If that file turned out to be incomplete, damaged, or not a CozyVTT backup at all, the deletion still happened, the replacement did not, and the screen said the restore had finished successfully. A restore is now all or nothing: if any part of the backup cannot be applied, nothing at all is changed and you are told plainly that it failed. The command-line restore script also checks the backup file is complete before it touches your database, and stops with your data untouched if it is not.
 
 - **An uploaded map or token image can no longer be served as a web page or a script.** CozyVTT accepts an image by checking its actual contents, but it stored the file under whatever name was sent and served it back with a type taken from that name. A real image uploaded as `page.html` was handed to the browser as a web page from your instance's own address, and one uploaded as `script.js` as a script, which together let a signed-in user plant a page that runs code for anyone they sent it to. Images are now stored under a name that matches what they really are and always served as an image, so opening one only ever shows the picture. Nothing you have uploaded is changed.
 

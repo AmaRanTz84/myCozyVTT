@@ -371,7 +371,8 @@ subsystem; see the [Event Inventory](#event-inventory) for the full list.
 **Permission:**
 - DM can move any token
 - Player can move tokens where `controlledBy === userId`
-- Spectator cannot move tokens
+- Spectator cannot move tokens, including one still named in a token's
+  `controlledBy` from before they were demoted
 
 **Broadcast:** `token.move.start` to campaign members (excluding sender)
 **Broadcast Payload:**
@@ -413,6 +414,17 @@ socket.on('token.move.start', (data) => {
   y: number;        // New Y coordinate
 }
 ```
+
+**Permission:** the same as `token.move.start`, and checked again here on every
+event. Nothing server-side ties a start event to the moves that follow it, so
+the check on the start cannot stand in for this one.
+- DM can move any token
+- Player can move tokens where `controlledBy === userId`
+- Spectator cannot move tokens
+
+A move the sender is not allowed to make is dropped without an `error`, because
+this fires up to 60 times a second and one error per frame would be its own
+problem. `token.move.end` answers properly.
 
 **Validation:**
 - Coordinates must be numbers
