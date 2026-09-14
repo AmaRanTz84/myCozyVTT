@@ -134,19 +134,38 @@ router.get('/', campaignMember, async (req: AuthenticatedRequest, res: Response)
   }
 });
 
+/**
+ * Whether a template may be used from this campaign.
+ *
+ * A template with no campaign is shipped SRD content and belongs to everyone.
+ * Any other template belongs to exactly one campaign. These routes are mounted
+ * under a campaign and the middleware proves only that the caller is in the
+ * campaign named in the URL, so the template's own campaign has to be compared
+ * as well. An id is not evidence: every token placed from a template carries
+ * one.
+ */
+function isVisibleFromCampaign(
+  template: { campaignId: string | null },
+  campaignId: string
+): boolean {
+  return template.campaignId === null || template.campaignId === campaignId;
+}
+
 // ============================================
 // GET ONE — GET /:creatureId
 // ============================================
 
 router.get('/:creatureId', campaignMember, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { creatureId } = req.params;
+    const { campaignId, creatureId } = req.params;
 
     const template = await prisma.creatureTemplate.findUnique({
       where: { id: creatureId },
     });
 
-    if (!template) {
+    // 404 for a template of another campaign as well as one that is not there,
+    // so the answer cannot confirm an id exists.
+    if (!template || !isVisibleFromCampaign(template, campaignId)) {
       return res.status(404).json({ error: 'Not Found', message: 'Creature template not found' });
     }
 
@@ -317,7 +336,7 @@ router.post('/:creatureId/duplicate', campaignDM, async (req: AuthenticatedReque
       where: { id: creatureId },
     });
 
-    if (!source) {
+    if (!source || !isVisibleFromCampaign(source, campaignId)) {
       return res.status(404).json({ error: 'Not Found', message: 'Creature template not found' });
     }
 
@@ -359,7 +378,9 @@ router.get('/favorites/list', campaignMember, async (req: AuthenticatedRequest, 
     const userId = req.session.userId!;
 
     const favorites = await prisma.creatureFavorite.findMany({
-      where: { campaignId, userId },
+      // The creature filter covers rows stored before the campaign was checked
+      // when they were favourited.
+      where: { campaignId, userId, creature: { OR: [{ campaignId: null }, { campaignId }] } },
       include: { creature: true },
       orderBy: { creature: { name: 'asc' } },
     });
@@ -383,6 +404,15 @@ router.post('/:creatureId/favorite', campaignMember, async (req: AuthenticatedRe
   try {
     const { campaignId, creatureId } = req.params;
     const userId = req.session.userId!;
+
+    const creature = await prisma.creatureTemplate.findUnique({
+      where: { id: creatureId },
+      select: { campaignId: true },
+    });
+
+    if (!creature || !isVisibleFromCampaign(creature, campaignId)) {
+      return res.status(404).json({ error: 'Not Found', message: 'Creature template not found' });
+    }
 
     // Check if already favorited
     const existing = await prisma.creatureFavorite.findUnique({
