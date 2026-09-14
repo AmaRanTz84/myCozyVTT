@@ -244,6 +244,13 @@ Two consequences to keep in mind when touching this:
 - **The grant is exactly one track, and it ends when the track does.** Nothing
   lets a member list or browse the DM's audio, and clearing the setting makes
   the file private again.
+- **That handler is the only thing allowed to write the setting.** It lives in
+  `Campaign.vibeSettings`, which the two campaign settings routes and campaign
+  import also write, and none of those can tell whether the caller may read the
+  asset an id names. They all go through `preserveAtmosphereAudio`
+  (`utils/vibe-presets.ts`), which keeps whatever is stored and discards the
+  caller's value, so a settings update neither opens a file nor stops the
+  music. An import starts with no track at all.
 
 ### Documents
 
