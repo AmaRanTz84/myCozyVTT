@@ -104,6 +104,28 @@ describe('revoking access ends the sessions already issued', () => {
   });
 });
 
+describe('a user recovering their own account', () => {
+  it('signs out their other devices when they change their password', async () => {
+    const keeper = await prisma.user.findUnique({ where: { id: keeperId } });
+    const kept = await login(keeper!.email);
+
+    const res = await kept.post('/api/auth/change-password').send({
+      currentPassword: TEST_PASSWORD,
+      newPassword: 'AnotherGoodPassword123!',
+    });
+    expect(res.status).toBe(200);
+
+    // The second argument keeps the device they are holding signed in.
+    expect(destroyed).toHaveBeenCalledWith(keeperId, expect.any(String));
+
+    // Put the password back for the tests that follow.
+    await kept.post('/api/auth/change-password').send({
+      currentPassword: 'AnotherGoodPassword123!',
+      newPassword: TEST_PASSWORD,
+    });
+  });
+});
+
 describe('an edit that is not a change of access', () => {
   it('leaves the person signed in', async () => {
     const keeper = await prisma.user.findUnique({ where: { id: keeperId } });
