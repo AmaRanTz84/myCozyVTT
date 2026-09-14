@@ -339,10 +339,12 @@ router.post(
         });
       }
 
-      // Set asset metadata on request for file validation
+      // Set asset metadata on request for file validation. The campaign comes
+      // from the decision, not the request: a personal upload naming a campaign
+      // would otherwise be filed in that campaign's library.
       req.assetType = type as AssetType;
       req.assetScope = assetScope;
-      req.campaignId = campaignId;
+      req.campaignId = decision.campaignId ?? undefined;
 
       return next();
     } catch (error) {
@@ -727,7 +729,11 @@ router.post('/documents', authenticated, uploadLimiter, async (req: Authenticate
 
     const bytes = Buffer.from(content, 'utf8');
     const filename = generateUniqueFilename(`document.${format}`);
-    const dir = getFilePath('DOCUMENT', scope === 'CAMPAIGN' ? 'CAMPAIGN' : 'GLOBAL', campaignId);
+    const dir = getFilePath(
+      'DOCUMENT',
+      scope === 'CAMPAIGN' ? 'CAMPAIGN' : 'GLOBAL',
+      decision.campaignId ?? undefined
+    );
     await ensureDirectory(dir);
     const filePath = path.join(dir, filename).replace(/\\/g, '/');
     await fs.promises.writeFile(filePath, bytes);
@@ -737,7 +743,7 @@ router.post('/documents', authenticated, uploadLimiter, async (req: Authenticate
         type: 'DOCUMENT',
         scope,
         uploadedById: userId,
-        campaignId: scope === 'CAMPAIGN' ? campaignId ?? null : null,
+        campaignId: decision.campaignId,
         filename,
         originalName: `${name}.${format}`,
         mimeType: TYPED_DOCUMENT_MIME[format],

@@ -261,7 +261,11 @@ Documents are assets of type `DOCUMENT`, so everything above applies, plus:
   `POST /api/assets/documents`: `GLOBAL` needs a platform admin or
   `globalAssetManager`, `CAMPAIGN` needs that campaign's DM, `USER` needs
   nothing. It returns `{ allowed, status, message }` so both routes refuse
-  with the same wording.
+  with the same wording, and on a yes it returns the `campaignId` the asset may
+  be filed under, `null` for anything not campaign-scoped. **Store that, not the
+  request's.** `Asset.campaignId` decides which campaign lists an asset, so a
+  personal upload naming a campaign would otherwise put a row in that
+  campaign's library without anyone there asking for it.
 - **Editing is the uploader's or an admin's.** `PUT /documents/:id/content`
   checks `uploadedById` against the session, not `canReadAsset`; being able to
   read a shared rulebook must not mean being able to rewrite it for the table.

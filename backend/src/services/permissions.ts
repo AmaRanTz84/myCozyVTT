@@ -328,8 +328,13 @@ export async function canExportCampaign(
  * Returns the refusal's status and message so a caller can answer exactly as
  * the upload route always has.
  */
+/**
+ * The answer also carries the campaign the asset may be filed under, because
+ * `campaignId` is what decides which campaign lists an asset and a caller's own
+ * value cannot be trusted for that. Only a CAMPAIGN-scoped asset has one.
+ */
 export type ScopeDecision =
-  | { allowed: true }
+  | { allowed: true; campaignId: string | null }
   | { allowed: false; status: 400 | 403; message: string };
 
 export async function canPlaceAssetAtScope(
@@ -339,7 +344,7 @@ export async function canPlaceAssetAtScope(
   campaignId: string | undefined
 ): Promise<ScopeDecision> {
   if (scope === 'USER') {
-    return { allowed: true };
+    return { allowed: true, campaignId: null };
   }
 
   if (scope === 'GLOBAL') {
@@ -354,7 +359,7 @@ export async function canPlaceAssetAtScope(
         message: 'Only administrators or global asset managers can upload GLOBAL assets',
       };
     }
-    return { allowed: true };
+    return { allowed: true, campaignId: null };
   }
 
   // CAMPAIGN
@@ -374,7 +379,7 @@ export async function canPlaceAssetAtScope(
       message: 'Only the Dungeon Master can upload campaign assets',
     };
   }
-  return { allowed: true };
+  return { allowed: true, campaignId };
 }
 
 /**
