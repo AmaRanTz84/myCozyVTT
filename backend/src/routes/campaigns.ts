@@ -841,6 +841,22 @@ router.delete('/:campaignId/members/:userId', campaignDM, async (req: Authentica
       });
     }
 
+    // Nor the owner, who is often sitting as a player after handing the seat
+    // over. Taking the seat back needs a membership, and only the DM can add
+    // one, so removing the owner would shut them out of their own campaign with
+    // no way in except deleting it.
+    const campaign = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { ownerId: true },
+    });
+
+    if (campaign?.ownerId === userId) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Cannot remove the campaign owner from their own campaign',
+      });
+    }
+
     // Delete the membership
     await prisma.campaignMembership.delete({
       where: {
