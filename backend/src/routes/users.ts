@@ -231,6 +231,21 @@ router.put('/:id', requireAuth, async (req: Request, res: Response) => {
       data: updateData,
     });
 
+    // A session carries the role and the two permission flags from the moment
+    // it was created and nothing re-reads them, so changing any of them here
+    // would otherwise leave the person holding the access just taken away.
+    // Compared against what was stored, so setting a value to what it already
+    // was does not sign anyone out.
+    const accessChanged =
+      (updateData.platformRole !== undefined && updateData.platformRole !== existingUser.platformRole) ||
+      (updateData.globalAssetManager !== undefined &&
+        updateData.globalAssetManager !== existingUser.globalAssetManager) ||
+      (updateData.templateEditor !== undefined && updateData.templateEditor !== existingUser.templateEditor);
+
+    if (accessChanged) {
+      await destroyUserLoginSessions(id);
+    }
+
     return res.status(200).json({
       message: 'User updated successfully',
       user: sanitizeUser(updatedUser),
@@ -393,6 +408,10 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: Request, res: Respo
     await prisma.user.delete({
       where: { id },
     });
+
+    // The session outlives the row it refers to, and the guards read the
+    // session, so it has to go too.
+    await destroyUserLoginSessions(id);
 
     return res.status(200).json({
       message: 'User deleted successfully',
