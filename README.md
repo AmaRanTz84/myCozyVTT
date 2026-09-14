@@ -16,7 +16,7 @@ A self-hosted, browser-based Virtual Tabletop (VTT) platform. Designed for ease 
 
 CozyVTT is a self-hosted, community-maintained project run **by you** on **your hardware**. It is provided as-is, with no warranty, no SLA, and no central support — see the [AGPL-3.0 License](LICENSE) for the legal version of this.
 
-**You are responsible for the security and uptime of your instance.** We do our best (Argon2id passwords, MFA, magic-byte file validation, per-endpoint rate limiting, non-root Docker containers, etc. — see [SECURITY.md](SECURITY.md) for the full list), but the operating environment is yours.
+**You are responsible for the security and uptime of your instance.** We do our best (Argon2id passwords, MFA, magic-byte file validation, per-endpoint rate limiting, security headers on the app page, non-root Docker containers — the full list is under [Features → Security](#security)), but the operating environment is yours.
 
 **Recommended deployment posture** for a public-facing instance:
 
@@ -38,7 +38,7 @@ If you find a security issue, please report it privately per [SECURITY.md](SECUR
 
 ### Platform
 - **Multi-campaign** — one server, unlimited campaigns, isolated from each other
-- **Role-based access control** — Platform Admin, Campaign DM, Player, and Spectator roles
+- **Role-based access control** — Platform Admin, Campaign DM, Player, and Spectator roles; the DM seat can be handed to another member without losing ownership of the campaign
 - **Setup wizard** — guided first-run initialization; no manual database seeding required
 - **Admin dashboard** — user management, system settings, activity logs, database backups
 
@@ -49,7 +49,8 @@ If you find a security issue, please report it privately per [SECURITY.md](SECUR
 - **Token templates** — save reusable token configurations (image, stats, HP, size, disposition, full NPC stat block); place from library or save from map context menu; copy templates between campaigns the DM owns
 - **NPC right-click rolls** — DMs right-click any NPC token to roll abilities, saves, skills, attacks, and damage parsed from its stat block; advantage/disadvantage selector for d20 systems; free-form custom roll fallback for non-5e systems
 - **Campaign export/import** — export campaigns as portable `.cozyvtt` archives; import on any CozyVTT instance; includes maps, tokens, creatures, templates, and assets; multi-step preview flow; optional audio toggle; secured against path traversal, zip bombs, and malicious files
-- **Walls & dynamic lighting** — DM-drawn wall segments (walls, doors, windows) with raycasting visibility; draw, polygon, and brush drawing modes; snap-to-grid and snap-to-endpoint; split, select, erase, and merge point tools; snap-to-wall door/window placement (auto-splits existing walls); players only see what their character can, and light never reveals through a wall — a lit room is visible only to someone with line of sight into it; door interactions for both DM and players; bright/dim light radii matching D&D 5e and PF2e rules; named light presets (Candle, Torch, Lamp, Lantern, Campfire); overlapping dim zones combine to bright
+- **Walls & dynamic lighting** — DM-drawn wall segments (walls, doors, windows) with raycasting visibility; draw, polygon, and brush drawing modes; snap-to-grid and snap-to-endpoint; split, select, erase, and merge point tools; multi-select with Shift, a drag-box or Ctrl+A, then move or delete the lot together; snap-to-wall door/window placement (auto-splits existing walls); players only see what their character can, and light never reveals through a wall — a lit room is visible only to someone with line of sight into it; door interactions for both DM and players; bright/dim light radii matching D&D 5e and PF2e rules; named light presets (Candle, Torch, Lamp, Lantern, Campfire); overlapping dim zones combine to bright
+- **Universal VTT import/export** — bring in a `.uvtt`, `.dd2vtt` or `.df2vtt` map from Dungeondraft, Dungeon Alchemist, Czepeku and others, with its walls, doors and lights already placed, and export any map back out. One file is one map, as the format intends; if a file's walls reach outside its own picture, CozyVTT says so before importing rather than leaving you to wonder
 - **Fog of war** — drag a box to reveal or hide chunks of the map; the selection snaps to whole grid squares, with animated fade transitions
 - **Spirit layer** — a second canvas layer for ethereal / astral / out-of-body scenes, hidden from players by default
 - **Initiative tracker** — real-time combat turn order; DM controls, players watch live. The acting token is ringed on the map for everyone, and hovering a name highlights its token (and vice versa)
@@ -70,11 +71,13 @@ If you find a security issue, please report it privately per [SECURITY.md](SECUR
 - **Real-time results** — rolls appear in the campaign chat log for all players
 - **Secret rolls** — hidden from the other players; your DM can still see them, and they stay in your own list marked as secret
 - **Dice history** — a running log of the session's rolls that survives a refresh, filtered per person by the server
+- **Saved rolls** — name a dice expression and it becomes a one-click button in the dice panel; private to you and scoped to one campaign, with the expression checked when you save it so a saved roll always works
 
 ### Communication
 - **Campaign chat** — in-session messaging between all members
 - **System messages** — automatic logs for joins, session events, and dice rolls
 - **Personal notes** — private per-campaign notes in Markdown, with a rendered preview and autosave; readable only by their author, enforced server-side
+- **Documents** — upload a PDF, plain text or Markdown rulebook or handout, or write one in the app, and read it without leaving CozyVTT; a DM shares documents with a campaign, and every member reads them from inside the session; text and Markdown documents can be edited by their uploader
 - **Session history** — every finished session with its date, length and the recap the DM wrote; the DM can edit or clear any past recap
 
 ### Theming & Customization
@@ -92,9 +95,11 @@ If you find a security issue, please report it privately per [SECURITY.md](SECUR
 - **Session-based authentication** with rolling expiry and "remember me"
 - **Password reset** via email (SMTP configurable)
 - **Admin-approval registration** (optional)
-- **File upload validation** — magic-byte content checks (not just MIME header), size limits by type
+- **File upload validation** — magic-byte content checks (not just MIME header), size limits by type; text uploads must genuinely be text, and documents are served as plain text or PDF, never as a web page
 - **Per-endpoint rate limiting** — global API limit, strict auth limit, asset upload limit (configurable via `ASSET_UPLOAD_RATE_LIMIT`)
+- **Security headers on the app page** — a Content-Security-Policy that allows script only from your own instance, plus `X-Frame-Options`, `nosniff`, `Referrer-Policy` and `Permissions-Policy`. Injected script cannot run, the app cannot be framed by another site, and the browser will not send data to an address CozyVTT does not use
 - **WebSocket campaign isolation** — server-authenticated campaign membership; no client-spoofing
+- **The backend runs as an unprivileged user** — the container starts as root only long enough to fix ownership on your mounted folders, then drops to `appuser` before the app itself runs
 - **Production refuses to start** with a placeholder `SESSION_SECRET`
 - See [SECURITY.md](SECURITY.md) for the vulnerability disclosure policy
 
@@ -188,7 +193,7 @@ All runtime configuration is managed through the Admin dashboard after setup:
 | Settings | Require Admin Approval | New registrations must be approved before login |
 | Settings | Timezone | Server timezone for session timestamps |
 | Settings | SMTP | Email server settings (test via the dashboard) |
-| Settings | Upload Limits | Per-type file size limits (maps, tokens, audio, avatars) |
+| Settings | Upload Limits | Per-type file size limits (maps, tokens, audio, avatars, documents) |
 | Appearance | Default Theme | Theme shown on the login page and used for new users (each user can override from their profile) |
 | Appearance | Default Font | Default font family applied alongside the default theme |
 | Appearance | Custom Theme | Build a palette from primary, accent, background, and text colors, with a live readability check |
@@ -207,6 +212,7 @@ Instance branding (logo, mascot, favicon) is **not** set from the dashboard yet 
 | Token images | 5 MB | `MAX_TOKEN_SIZE_MB` |
 | Audio files | 20 MB | `MAX_AUDIO_SIZE_MB` |
 | Avatar images | 2 MB | `MAX_AVATAR_SIZE_MB` |
+| Documents (PDF, text, Markdown) | 50 MB | `MAX_DOCUMENT_SIZE_MB` |
 
 Set these in `.env` and restart — no rebuild needed. If you raise one, raise your reverse proxy's body limit to match (`NGINX_MAX_BODY_SIZE` for the bundled Nginx). See [Upload Size Limits](docs/DEPLOYMENT.md#upload-size-limits).
 
@@ -260,7 +266,7 @@ Built by other people, on their own terms. They are not part of CozyVTT, are not
 
 A note on building things like this. CozyVTT's HTTP and WebSocket surfaces are **not a public API**: they are what the web client calls, they are not versioned, and they carry no compatibility promise, so they can change in any release. They *can* be driven by a program — signing in with your own email and password returns a session cookie that authenticates both, and a script can do exactly what the web client does, as that user with that user's permissions. Unsupported is the honest word for it, not impossible.
 
-That is why `cozyvtt-mcp` pins to a CozyVTT version and keeps a compatibility table. At the time of writing it targets **v1.2.2**, and 1.3.0 changed enough of the API that you should check its table before pairing the two.
+That is why `cozyvtt-mcp` pins to a CozyVTT version and keeps a compatibility table. Check that table before pairing the two: the surface it builds on is unversioned and can change in any release.
 
 ---
 
@@ -274,6 +280,7 @@ uploads/
   tokens/      Token images and thumbnails
   audio/       Ambient audio files
   avatars/     User profile avatars
+  documents/   PDF, text and Markdown documents
   backups/     Database backup files (pg_dump)
 ```
 

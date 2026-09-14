@@ -29,7 +29,7 @@ import configRoutes from './routes/config';
 import { initializeWebSocket } from './websocket';
 import logger from './utils/logger';
 import { prisma } from './config/database';
-import { FILE_SIZE_LIMITS } from './utils/fileUtils';
+import { UPLOAD_LIMITS } from './utils/fileUtils';
 import { getProxyLimitWarnings } from './utils/proxyLimits';
 
 const app = express();
@@ -47,7 +47,13 @@ app.set('trust proxy', 1);
 // SECURITY MIDDLEWARE
 // ============================================
 
-// Helmet: sets secure HTTP response headers
+// Helmet: sets secure HTTP response headers.
+//
+// These cover what this process answers, which in the production stack is
+// /api and /socket.io. The app page is served by the frontend container, so
+// its policy lives in frontend/security-headers.conf. The two describe the
+// same application and should be changed together; the page's is the wider of
+// the two, because the themes load Google Fonts and this one never has to.
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -207,7 +213,7 @@ httpServer.listen(PORT, () => {
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`CORS origin: ${process.env.CORS_ORIGIN || 'http://localhost:3000'}`);
 
-  const uploadLimits = Object.entries(FILE_SIZE_LIMITS)
+  const uploadLimits = Object.entries(UPLOAD_LIMITS)
     .map(([type, bytes]) => `${type} ${Math.round(bytes / (1024 * 1024))}MB`)
     .join(', ');
   logger.info(`Upload limits: ${uploadLimits}`);

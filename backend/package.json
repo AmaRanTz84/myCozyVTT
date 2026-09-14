@@ -1,6 +1,6 @@
 {
   "name": "cozyvtt-backend",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "CozyVTT Backend - Self-hosted Virtual Tabletop",
   "main": "dist/server.js",
   "scripts": {
@@ -29,7 +29,7 @@
     "rpg"
   ],
   "author": "CozyVTT Development Team",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@prisma/client": "5.8",
     "archiver": "^7.0.1",
@@ -52,7 +52,7 @@
     "pg": "^8.11.3",
     "prisma": "5.8",
     "qrcode": "^1.5.3",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.4",
     "socket.io": "^4.8.3",
     "speakeasy": "^2.0.0",
     "unzipper": "^0.12.3",

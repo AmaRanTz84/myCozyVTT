@@ -29,7 +29,14 @@ import EditMapModal from './EditMapModal';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import Button from '@/components/ui/Button';
 import { extractAssetId } from '@/utils/assetUrl';
-import { apiErrorMessage } from '@/utils/errors';
+import { apiErrorCode, apiErrorMessage } from '@/utils/errors';
+import {
+  uvttImportDecision,
+  uvttImportMessage,
+  uvttImportTitle,
+  hasOutOfBounds,
+} from '@/utils/uvttImport';
+import type { UvttImportDecision } from '@/utils/uvttImport';
 
 interface MapManagerProps {
   isOpen: boolean;
@@ -317,6 +324,16 @@ export default function MapManager({ isOpen, onClose }: MapManagerProps) {
   const uvttInputRef = useRef<HTMLInputElement>(null);
   const [isImportingUVTT, setIsImportingUVTT] = useState(false);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  /**
+   * A UVTT the server would not import without being asked: its walls reach
+   * outside its picture, or it carries walls for its furniture, or both. Held
+   * here so the same file can be sent again with the answer.
+   */
+  const [uvttToConfirm, setUvttToConfirm] = useState<{
+    file: File;
+    decision: UvttImportDecision;
+  } | null>(null);
+  const [includeObjectWalls, setIncludeObjectWalls] = useState(false);
 
   // Fetch maps when the panel opens
   const fetchMaps = useCallback(async () => {
@@ -389,17 +406,16 @@ export default function MapManager({ isOpen, onClose }: MapManagerProps) {
 
   // ---- UVTT import ----
 
-  const handleUVTTImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !campaign?.id) return;
-    // Reset input so the same file can be re-selected
-    e.target.value = '';
-
+  const runUVTTImport = async (
+    file: File,
+    opts: { confirm?: boolean; includeObjectWalls?: boolean } = {}
+  ) => {
+    if (!campaign?.id) return;
     setIsImportingUVTT(true);
     setError(null);
     setImportSuccess(null);
     try {
-      const result = await mapService.importUVTT(campaign.id, file);
+      const result = await mapService.importUVTT(campaign.id, file, undefined, undefined, opts);
       setMaps((prev) => [result.map, ...prev]);
       const parts = [`${result.totalSegments} wall segments`];
       if (result.portalCount > 0) parts.push(`${result.portalCount} doors`);
@@ -408,11 +424,34 @@ export default function MapManager({ isOpen, onClose }: MapManagerProps) {
       // Auto-clear success message after 5 seconds
       setTimeout(() => setImportSuccess(null), 5000);
     } catch (err: unknown) {
-      const msg = apiErrorMessage(err) || 'Failed to import UVTT file.';
-      setError(msg);
+      // The file needs an answer before it can become a map. Nothing has been
+      // created; ask, then send the same file again with the decision.
+      if (apiErrorCode(err) === 'UVTT_IMPORT_NEEDS_CONFIRMATION') {
+        const decision = uvttImportDecision(err);
+        if (decision) {
+          setIncludeObjectWalls(false);
+          setUvttToConfirm({ file, decision });
+          return;
+        }
+      }
+      setError(apiErrorMessage(err) || 'Failed to import UVTT file.');
     } finally {
       setIsImportingUVTT(false);
     }
+  };
+
+  const handleUVTTImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !campaign?.id) return;
+    // Reset input so the same file can be re-selected
+    e.target.value = '';
+    await runUVTTImport(file);
+  };
+
+  const handleConfirmUVTTImport = async () => {
+    const pending = uvttToConfirm;
+    setUvttToConfirm(null);
+    if (pending) await runUVTTImport(pending.file, { confirm: true, includeObjectWalls });
   };
 
   // ---- Map switching ----
@@ -680,6 +719,31 @@ export default function MapManager({ isOpen, onClose }: MapManagerProps) {
           onUpdated={handleUpdated}
         />
       )}
+      <ConfirmDialog
+        isOpen={!!uvttToConfirm}
+        title={uvttImportTitle(uvttToConfirm?.decision)}
+        message={uvttImportMessage(uvttToConfirm?.decision)}
+        confirmLabel={
+          uvttToConfirm && !hasOutOfBounds(uvttToConfirm.decision.outOfBounds)
+            ? 'Import'
+            : 'Import anyway'
+        }
+        variant="warning"
+        onConfirm={handleConfirmUVTTImport}
+        onCancel={() => setUvttToConfirm(null)}
+      >
+        {uvttToConfirm && uvttToConfirm.decision.objectWalls > 0 && (
+          <label className="flex items-start gap-2 text-sm text-ink-secondary cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeObjectWalls}
+              onChange={(e) => setIncludeObjectWalls(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>Let furniture block sight too</span>
+          </label>
+        )}
+      </ConfirmDialog>
       <ConfirmDialog
         isOpen={!!mapToDelete}
         title="Delete Map"

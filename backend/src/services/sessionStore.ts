@@ -13,17 +13,30 @@ import logger from '../utils/logger';
 /**
  * End every login session belonging to a user.
  *
- * Used when an admin resets someone's password: without this the target keeps
- * browsing on their existing session, and the forced-password-change gate would
- * only apply the next time they log in.
+ * Used when an admin resets someone's password, when their role or permissions
+ * change, and when their account is deleted: the guards read the role from the
+ * session and nothing re-reads it, so without this the person keeps whatever
+ * they had until they happen to sign out.
+ *
+ * `exceptSessionId` keeps one session alive, which is what a self-service
+ * password change wants: the other devices are signed out and the person who
+ * just changed it stays where they are.
  *
  * @returns number of sessions removed
  */
-export async function destroyUserLoginSessions(userId: string): Promise<number> {
+export async function destroyUserLoginSessions(
+  userId: string,
+  exceptSessionId?: string
+): Promise<number> {
   try {
-    const removed = await prisma.$executeRaw`
-      DELETE FROM session WHERE sess->>'userId' = ${userId}
-    `;
+    const removed = exceptSessionId
+      ? await prisma.$executeRaw`
+          DELETE FROM session
+          WHERE sess->>'userId' = ${userId} AND sid <> ${exceptSessionId}
+        `
+      : await prisma.$executeRaw`
+          DELETE FROM session WHERE sess->>'userId' = ${userId}
+        `;
     return removed;
   } catch (error) {
     // Best-effort: the password has already been changed, so a failure here

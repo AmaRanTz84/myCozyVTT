@@ -371,7 +371,8 @@ subsystem; see the [Event Inventory](#event-inventory) for the full list.
 **Permission:**
 - DM can move any token
 - Player can move tokens where `controlledBy === userId`
-- Spectator cannot move tokens
+- Spectator cannot move tokens, including one still named in a token's
+  `controlledBy` from before they were demoted
 
 **Broadcast:** `token.move.start` to campaign members (excluding sender)
 **Broadcast Payload:**
@@ -413,6 +414,17 @@ socket.on('token.move.start', (data) => {
   y: number;        // New Y coordinate
 }
 ```
+
+**Permission:** the same as `token.move.start`, and checked again here on every
+event. Nothing server-side ties a start event to the moves that follow it, so
+the check on the start cannot stand in for this one.
+- DM can move any token
+- Player can move tokens where `controlledBy === userId`
+- Spectator cannot move tokens
+
+A move the sender is not allowed to make is dropped without an `error`, because
+this fires up to 60 times a second and one error per frame would be its own
+problem. `token.move.end` answers properly.
 
 **Validation:**
 - Coordinates must be numbers
@@ -933,6 +945,7 @@ right-hand column.
 | `atmosphere.audio.set` | DM only | DM queues or stops ambient audio for all players. |
 | `atmosphere.effect.set` | DM only | DM sets a visual particle overlay on the map canvas. |
 | `authenticate` | Any member | — |
+| `character.hitdice.spend` | Any member | spend one D&D 5e hit die. |
 | `character.hp.update` | Any member | — |
 | `chat.message` | Any member | User sends chat message. |
 | `dice.clearHistory` | DM only | DM clears dice roll history (DM-only). |
@@ -977,25 +990,34 @@ right-hand column.
 | `atmosphere.audio.updated` | `atmosphere.ts` |
 | `atmosphere.effect.updated` | `atmosphere.ts` |
 | `authenticated` | `events.ts` |
+| `campaign.dm.transferred` | `campaigns.ts` |
 | `character.hp.updated` | `characters.ts` |
+| `character.updated` | `characters.ts` |
 | `chat.message` | `chat.ts` |
 | `chat.system` | `utils.ts` |
 | `connected` | `events.ts` |
 | `dice.historyCleared` | `dice.ts` |
-| `dice.rolled` | `dice.ts` |
+| `dice.rolled` | `initiative.ts` |
 | `dice.rolled.secret` | `dice.ts` |
 | `dm:editing` | `walls.ts` |
 | `fog:cells` | `fog.ts` |
 | `fog:updated` | `fog.ts` |
 | `initiative.state` | `initiative.ts` |
+| `invitation.received` | `campaigns.ts` |
 | `light:added` | `lights.ts` |
 | `light:removed` | `lights.ts` |
 | `light:updated` | `lights.ts` |
 | `lights:replaced` | `lights.ts` |
 | `map.changed` | `maps.ts` |
 | `map.pinged` | `pings.ts` |
+| `map:lighting:updated` | `maps.ts` |
 | `pong` | `events.ts` |
-| `presence.state` | `events.ts` |
+| `presence.state` | `utils.ts` |
+| `roster.updated` | `characters.ts` |
+| `session.ended` | `campaigns.ts` |
+| `session.paused` | `campaigns.ts` |
+| `session.resumed` | `campaigns.ts` |
+| `session.started` | `campaigns.ts` |
 | `spirit_layer.style_changed` | `spirit.ts` |
 | `spirit_layer.toggled` | `spirit.ts` |
 | `spirit_layer.token.toggled` | `spirit.ts` |

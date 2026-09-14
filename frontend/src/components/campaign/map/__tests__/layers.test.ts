@@ -450,7 +450,7 @@ describe('drawWalls', () => {
       isDM: false,
       wallColor: '#ff6600',
       hoveredWallId: null,
-      selectedWallId: null,
+      selectedWallIds: new Set<string>(),
       hoveredDoorId: null,
       showEndpoints: false,
       dragEndpoint: null,

@@ -15,7 +15,8 @@
  *    printed number is the rule. Nothing in this module computes a bonus.
  *
  * Sources: Archives of Nethys, "Reading Creature Statistics" and "Building
- * Creatures"; Pathfinder 2e Core Rulebook (system-docs/Pathfinder).
+ * Creatures", and the Pathfinder 2e Core Rulebook. Checked against both rather
+ * than written from memory.
  */
 
 import type { NpcStatBlock } from '@/types';

@@ -47,8 +47,9 @@ class MapService {
     file: File,
     name?: string,
     gridSize?: number,
+    options?: { confirm?: boolean; includeObjectWalls?: boolean },
   ): Promise<{ map: Map; wallCount: number; portalCount: number; totalSegments: number; lightCount: number }> {
-    return api.importUVTT(campaignId, file, name, gridSize);
+    return api.importUVTT(campaignId, file, name, gridSize, options);
   }
 
   /**

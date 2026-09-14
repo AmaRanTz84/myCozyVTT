@@ -7,6 +7,7 @@ import { registerUser, authenticateUser, sanitizeUser, hashPassword, verifyPassw
 import { rememberMeMaxAge } from '../config/session';
 import { validatePasswordStrength } from '../utils/validation';
 import { isSmtpConfigured, sendPasswordResetEmail } from '../services/email';
+import { destroyUserLoginSessions } from '../services/sessionStore';
 import { requireAuth } from '../middleware/auth';
 import { prisma } from '../config/database';
 import { getSystemSettings, getAppearanceSettings } from '../services/systemSettings';
@@ -503,6 +504,12 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
     // Lift the gate for this session immediately (see middleware/passwordChange.ts)
     req.session.mustChangePassword = false;
 
+    // Changing a password is how someone recovers an account they think is
+    // compromised, so the sessions opened with the old one have to end. This
+    // one is kept, so the person doing it is not signed out of the device they
+    // are holding.
+    await destroyUserLoginSessions(user.id, req.sessionID);
+
     return res.status(200).json({
       message: 'Password changed successfully',
     });
@@ -866,6 +873,11 @@ router.post('/mfa/disable', requireAuth, async (req: Request, res: Response) => 
         mfaBackupCodes: [],
       },
     });
+
+    // Turning the second factor off is a change to how the account is
+    // protected, so the sessions opened while it was on end with it. This one
+    // is kept, as with a password change.
+    await destroyUserLoginSessions(user.id, req.sessionID);
 
     return res.status(200).json({ message: 'MFA disabled successfully' });
   } catch (error) {

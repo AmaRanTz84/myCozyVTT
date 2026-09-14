@@ -194,6 +194,14 @@ There's a second catch. Out of the box, the backend and frontend use `expose`, w
 
    You should see `content-type: application/json` and a line like `{"setupCompleted":false,...}`. If you see `content-type: text/html`, your proxy is sending `/api` to the frontend instead of the backend. If you see `502`, nothing is listening where your proxy is pointing — usually step 2 was skipped.
 
+5. **Check the security headers still arrive:**
+
+   ```bash
+   curl -sI https://your-domain.com/ | grep -i -E 'content-security|x-frame'
+   ```
+
+   CozyVTT sets these on the frontend container, so removing the bundled Nginx does not lose them — a proxy passes response headers through by default. If nothing comes back, your proxy is stripping or replacing them; whatever it offers instead needs to allow `https://fonts.googleapis.com` for stylesheets and `https://fonts.gstatic.com` for fonts, or every theme loses its typeface. See `frontend/security-headers.conf` for the policy CozyVTT sends.
+
 ### Option B — Shared Docker network (recommended for Traefik/Caddy)
 
 If your proxy also runs in Docker, this is cleaner: it talks to the containers directly by name, and **no ports need to be opened at all**.
@@ -350,6 +358,23 @@ docker compose up -d
 `down` is needed the first time because an nginx container that is already running keeps running until it is stopped — the profile only controls what *starts*.
 
 > One catch: this automatic pickup only happens when you run plain `docker compose` commands. If you pass `-f` yourself, list both files: `docker compose -f docker-compose.yml -f docker-compose.override.yml up -d`.
+
+### Can I run CozyVTT in a folder, like `example.com/cozyvtt/`?
+
+Not at the moment. Give CozyVTT its own web address instead — `cozyvtt.example.com`, or `example.com` itself.
+
+**Why:** the addresses of your maps and token pictures are saved starting with a `/`, which means "the top of this website". Put CozyVTT in a folder and those addresses point one level too high, so none of the pictures load. Changing the *domain* is free for the same reason — the domain was never part of the saved address — which is why moving from one hostname to another just works.
+
+**What to do instead:** add a DNS record for `cozyvtt.example.com` pointing at your server, then match on that hostname rather than a path. In Traefik that means a `Host()` rule instead of `PathPrefix()`:
+
+```yaml
+# instead of:  PathPrefix(`/cozyvtt`)
+- "traefik.http.routers.cozyvtt.rule=Host(`cozyvtt.example.com`)"
+```
+
+It takes about five minutes, and it is the setup CozyVTT is built and tested for.
+
+Running in a folder is on the backlog rather than ruled out. If it matters to you, say so on the issue tracker — how many people need it is what decides whether it gets built.
 
 ---
 
@@ -577,6 +602,7 @@ MAX_MAP_SIZE_MB=50
 MAX_TOKEN_SIZE_MB=5
 MAX_AUDIO_SIZE_MB=20
 MAX_AVATAR_SIZE_MB=2
+MAX_DOCUMENT_SIZE_MB=50
 
 # Request body cap for the bundled Nginx — must be >= the largest limit above
 # plus ~5 MB of multipart overhead
@@ -584,6 +610,8 @@ NGINX_MAX_BODY_SIZE=55M
 ```
 
 These take effect on `docker compose up -d` (no image rebuild needed): the backend enforces them, and the app fetches them at runtime for the admin panel and the upload dialog. Values that aren't a positive number are ignored, with a warning in the backend log.
+
+`MAX_DOCUMENT_SIZE_MB` covers the PDF, text and Markdown files in the document library. Core rulebooks often run past 50 MB; if your group's do, raise this one and `NGINX_MAX_BODY_SIZE` together.
 
 **If you raise a limit, raise the proxy limit too.** A file larger than the proxy's body cap is rejected with an HTTP 413 before it ever reaches CozyVTT:
 
@@ -598,7 +626,7 @@ These take effect on `docker compose up -d` (no image rebuild needed): the backe
 The backend logs its effective limits at startup and warns when they exceed the configured proxy cap:
 
 ```
-Upload limits: MAP 50MB, TOKEN 5MB, AUDIO 250MB, AVATAR 2MB
+Upload limits: MAP 50MB, TOKEN 5MB, AUDIO 250MB, AVATAR 2MB, DOCUMENT 50MB
 NGINX_MAX_BODY_SIZE=55M is smaller than the largest upload limit AUDIO (250 MB). ...
 ```
 
@@ -651,6 +679,11 @@ Both notice that you are running under Docker and do the work inside the
 database container, so you do **not** need PostgreSQL installed on the host.
 Backups older than 30 days are pruned; set `BACKUP_RETAIN_DAYS` to change that.
 
+**A restore either works completely or changes nothing.** The restore script
+checks the backup file is complete before it touches your database, and loads it
+in a single step that is undone if any part of it fails. A damaged or truncated
+backup stops with your existing data still there, and tells you so.
+
 If you run CozyVTT without Docker, give them a `DATABASE_URL` instead:
 
 ```bash
@@ -666,10 +699,21 @@ The same thing by hand, if you would rather not use the scripts:
 docker compose exec database \
   pg_dump -U cozyvtt cozyvtt | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
 
+# Check the backup file is complete before going near the database
+gzip -t backup_YYYYMMDD_HHMMSS.sql.gz && echo "archive is complete"
+
 # Restore from a backup
 gunzip -c backup_YYYYMMDD_HHMMSS.sql.gz | \
-  docker compose exec -T database psql -U cozyvtt cozyvtt
+  docker compose exec -T database psql -U cozyvtt cozyvtt \
+    -v ON_ERROR_STOP=1 --single-transaction
 ```
+
+> **Keep those last two options if you change this command.** A backup starts by
+> deleting the tables it is about to rewrite. Without `ON_ERROR_STOP=1` psql
+> carries on past a failure and still reports success, and without
+> `--single-transaction` a failure partway through leaves the tables deleted and
+> not replaced. Together they make the restore all or nothing. The restore
+> script already passes both.
 
 ### Automated Daily Backups (cron)
 
@@ -807,12 +851,15 @@ Database migrations run automatically via `prisma migrate deploy` on every start
 
 > **Back up before you upgrade.** See [Database Backups](#database-backups) — one `pg_dump` command, and back up `backend/uploads/` alongside it.
 
-### One-off data migration for this release
+### One-off data migration (only if upgrading from before 1.3.0)
+
+**1.4.0 needs no manual step** — its migrations run automatically and change no
+existing data. This section applies only if you are coming from a version
+**before 1.3.0** and never ran it.
 
 If you have **Pathfinder 2e** characters made from the built-in templates, run
-this once after upgrading so their strikes and class features appear on the
-sheet. It also tidies up D&D 5e sheets, whose features already display without
-it.
+this once so their strikes and class features appear on the sheet. It also
+tidies up D&D 5e sheets, whose features already display without it.
 
 ```bash
 # See what would change, without writing anything
@@ -856,7 +903,7 @@ Before going live:
 - [ ] **Admin MFA** — Admin account has MFA enabled
 - [ ] **Backups tested** — Automated backups configured and a restore drill completed successfully
 - [ ] **Upload isolation** — `backend/uploads/` is served only through authenticated backend endpoints, not directly by the web server
-- [ ] **Security headers** — HSTS, X-Content-Type-Options, X-Frame-Options are set in the Nginx HTTPS block
+- [ ] **Security headers** — CozyVTT sends its own (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) from the container that serves the app page, so they arrive whether you use the bundled Nginx or your own proxy. Confirm with `curl -sI https://your-host/ | grep -i content-security`. If your proxy strips or overwrites response headers, stop doing that. **HSTS is the one you add yourself**, in your HTTPS block — see the commented line in `nginx/nginx.conf`
 - [ ] **Database isolation** — PostgreSQL container uses `expose` (not `ports`); unreachable from outside the Docker network
 - [ ] **Log rotation** — `backend/logs/` directory is being rotated (consider `logrotate` for the host-mounted path)
 - [ ] **OS updates** — A plan exists for keeping the host OS and Docker up to date

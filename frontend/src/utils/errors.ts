@@ -30,6 +30,7 @@
 interface ApiErrorBody {
   message?: unknown;
   error?: unknown;
+  code?: unknown;
   validationErrors?: unknown;
 }
 
@@ -62,6 +63,19 @@ export function apiErrorText(err: unknown): string | undefined {
 export function apiErrorStatus(err: unknown): number | undefined {
   const status = errorResponse(err)?.status;
   return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * `err.response.data.code` when it is a string.
+ *
+ * The backend sends a machine-readable code alongside the wording on responses
+ * a client has to act on, so routing on it cannot break when the message is
+ * reworded. `PASSWORD_CHANGE_REQUIRED` and `UVTT_IMPORT_NEEDS_CONFIRMATION`
+ * are the ones in use.
+ */
+export function apiErrorCode(err: unknown): string | undefined {
+  const code = errorResponse(err)?.data?.code;
+  return typeof code === 'string' ? code : undefined;
 }
 
 /** One entry from the backend's Zod validation report. */
