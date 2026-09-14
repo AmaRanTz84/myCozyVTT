@@ -28,6 +28,17 @@ if [[ ! -f "$BACKUP_FILE" ]]; then
   exit 1
 fi
 
+# Check the archive is whole before anything is dropped. Restoring runs a dump
+# that deletes every table before recreating it, so a truncated or corrupted
+# file used to destroy the database and then fail to refill it. This catches a
+# damaged archive; a complete archive holding bad SQL is caught later by
+# ON_ERROR_STOP, after the load has been wrapped in a transaction.
+if ! gzip -t "$BACKUP_FILE" 2>/dev/null; then
+  echo "❌ $BACKUP_FILE is not a complete gzip archive. Nothing was changed."
+  echo "   The file is truncated or corrupted. Try another backup."
+  exit 1
+fi
+
 # ------------------------------------------------------------------
 # Docker deployments: run psql inside the database container.
 #
@@ -69,7 +80,8 @@ if [[ -z "${DATABASE_URL:-}" ]] && command -v docker >/dev/null 2>&1; then
 
     echo "🔄 Restoring from $BACKUP_FILE..."
     if gunzip -c "$BACKUP_FILE" | docker compose exec -T "$DB_SERVICE" \
-        psql -U "$DB_USER" -d "$DB_NAME" -q; then
+        psql -U "$DB_USER" -d "$DB_NAME" -q \
+        -v ON_ERROR_STOP=1 --single-transaction; then
       echo "✅ Restore complete."
       echo ""
       echo "Next steps:"
@@ -135,7 +147,9 @@ if gunzip -c "$BACKUP_FILE" | psql \
     -U "$DB_USER" \
     -d "$DB_NAME" \
     --no-password \
-    -q; then
+    -q \
+    -v ON_ERROR_STOP=1 \
+    --single-transaction; then
   echo "✅ Restore complete."
   echo ""
   echo "Next steps:"

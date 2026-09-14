@@ -26,6 +26,7 @@ import {
 import { sanitizeInput, validateEmail, isSameOriginPath } from '../utils/validation';
 import { hashPassword, sanitizeUser } from '../services/auth';
 import { isSmtpConfigured, sendTestEmail, sendWelcomeEmail, sendInvitationEmail } from '../services/email';
+import { buildRestoreArgs } from '../utils/pgRestore';
 import { UPLOAD_LIMITS } from '../utils/fileUtils';
 import { extractArchiveSafely } from '../utils/archive';
 import logger from '../utils/logger';
@@ -880,7 +881,7 @@ router.post('/backups/restore', restoreUpload.single('backup'), async (req, res)
 
     // 3. Restore the database
     try {
-      await execFileAsync('psql', ['--dbname', dbUrl, '--file', sqlPath]);
+      await execFileAsync('psql', buildRestoreArgs(dbUrl, sqlPath));
     } catch (execError: unknown) {
       if (errorCode(execError) === 'ENOENT') {
         return res.status(500).json({
