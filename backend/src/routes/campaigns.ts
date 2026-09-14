@@ -12,7 +12,7 @@ import {
   applyRoleToLiveSockets,
 } from '../websocket/utils';
 import { isSmtpConfigured, sendCampaignInvitationEmail } from '../services/email';
-import { DEFAULT_VIBE_SETTINGS, validateVibeSettings, findVibePeriod, VibeSettings } from '../utils/vibe-presets';
+import { DEFAULT_VIBE_SETTINGS, validateVibeSettings, findVibePeriod, preserveAtmosphereAudio, VibeSettings } from '../utils/vibe-presets';
 import { GameSystem } from '../game-systems';
 import { exportCampaign } from '../services/campaignExporter';
 import { previewCampaignImport, importCampaign } from '../services/campaignImporter';
@@ -384,7 +384,15 @@ router.put('/:campaignId', campaignDM, async (req: AuthenticatedRequest, res: Re
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (status !== undefined) updateData.status = status;
-    if (vibeSettings !== undefined) updateData.vibeSettings = toJson(vibeSettings);
+    if (vibeSettings !== undefined) {
+      const stored = await prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { vibeSettings: true },
+      });
+      updateData.vibeSettings = toJson(
+        preserveAtmosphereAudio(vibeSettings, stored?.vibeSettings)
+      );
+    }
     if (spiritLayerEnabled !== undefined) updateData.spiritLayerEnabled = spiritLayerEnabled;
     if (spiritLayerStyle !== undefined) updateData.spiritLayerStyle = spiritLayerStyle;
     if (chatCooldownEnabled !== undefined) updateData.chatCooldownEnabled = chatCooldownEnabled;
@@ -474,10 +482,12 @@ router.put('/:campaignId/vibe', campaignDM, async (req: AuthenticatedRequest, re
     // If campaign has a currentVibe, verify it still exists in the new periods
     const campaign = await prisma.campaign.findUnique({
       where: { id: campaignId },
-      select: { currentVibe: true },
+      select: { currentVibe: true, vibeSettings: true },
     });
 
-    const updateData: Prisma.CampaignUpdateInput = { vibeSettings: toJson(vibeSettings) };
+    const updateData: Prisma.CampaignUpdateInput = {
+      vibeSettings: toJson(preserveAtmosphereAudio(vibeSettings, campaign?.vibeSettings)),
+    };
 
     // Reset currentVibe if current period no longer exists in new settings
     if (campaign?.currentVibe) {

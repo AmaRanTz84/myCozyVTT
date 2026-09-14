@@ -28,6 +28,7 @@ import {
   IMPORT_LIMITS,
 } from '../validators/campaignImport';
 import type { MapData, AssetManifestData } from '../validators/campaignImport';
+import { preserveAtmosphereAudio } from '../utils/vibe-presets';
 import { isSafeArchivePath } from '../utils/archive';
 import logger from '../utils/logger';
 
@@ -208,7 +209,11 @@ export async function importCampaign(
       gameSystem: (campaignSettings.gameSystem as GameSystem) || null,
       status: 'PREPARATION',
       ownerId: importingUserId,
-      vibeSettings: (campaignSettings.vibeSettings as Prisma.InputJsonValue) || defaultVibeSettings,
+      // The archive is a file the importer chose, so its atmosphere track is a
+      // client-supplied asset id like any other. A new campaign has none.
+      vibeSettings:
+        (preserveAtmosphereAudio(campaignSettings.vibeSettings) as Prisma.InputJsonValue) ||
+        defaultVibeSettings,
       currentVibe: campaignSettings.currentVibe || null,
       spiritLayerEnabled: campaignSettings.spiritLayerEnabled ?? false,
       spiritLayerStyle: campaignSettings.spiritLayerStyle ?? 'wispy',

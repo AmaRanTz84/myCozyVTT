@@ -244,6 +244,13 @@ Two consequences to keep in mind when touching this:
 - **The grant is exactly one track, and it ends when the track does.** Nothing
   lets a member list or browse the DM's audio, and clearing the setting makes
   the file private again.
+- **That handler is the only thing allowed to write the setting.** It lives in
+  `Campaign.vibeSettings`, which the two campaign settings routes and campaign
+  import also write, and none of those can tell whether the caller may read the
+  asset an id names. They all go through `preserveAtmosphereAudio`
+  (`utils/vibe-presets.ts`), which keeps whatever is stored and discards the
+  caller's value, so a settings update neither opens a file nor stops the
+  music. An import starts with no track at all.
 
 ### Documents
 
@@ -254,7 +261,11 @@ Documents are assets of type `DOCUMENT`, so everything above applies, plus:
   `POST /api/assets/documents`: `GLOBAL` needs a platform admin or
   `globalAssetManager`, `CAMPAIGN` needs that campaign's DM, `USER` needs
   nothing. It returns `{ allowed, status, message }` so both routes refuse
-  with the same wording.
+  with the same wording, and on a yes it returns the `campaignId` the asset may
+  be filed under, `null` for anything not campaign-scoped. **Store that, not the
+  request's.** `Asset.campaignId` decides which campaign lists an asset, so a
+  personal upload naming a campaign would otherwise put a row in that
+  campaign's library without anyone there asking for it.
 - **Editing is the uploader's or an admin's.** `PUT /documents/:id/content`
   checks `uploadedById` against the session, not `canReadAsset`; being able to
   read a shared rulebook must not mean being able to rewrite it for the table.

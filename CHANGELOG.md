@@ -24,6 +24,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **An uploaded map or token image can no longer be served as a web page or a script.** CozyVTT accepts an image by checking its actual contents, but it stored the file under whatever name was sent and served it back with a type taken from that name. A real image uploaded as `page.html` was handed to the browser as a web page from your instance's own address, and one uploaded as `script.js` as a script, which together let a signed-in user plant a page that runs code for anyone they sent it to. Images are now stored under a name that matches what they really are and always served as an image, so opening one only ever shows the picture. Nothing you have uploaded is changed.
+
 - **The map tool panels start out of the way.** Walls, Lights and Fog of War all opened expanded, covering a good part of the map before you had asked for any of them. They now start folded, and open with a click when you want one
 
 - **Folding a tool panel away puts its tool down.** The Walls and Lights panels already did this; Fog of War did not, so you could arm Reveal, fold the panel, and then change what your players could see with a drag on the map and nothing on screen to explain it. All three behave the same way now
