@@ -11,12 +11,22 @@
 # (Vite ci scrive la cache .vite). Qui diventano volumi nominati, che prepariamo
 # prima del primo avvio.
 #
+# Problema 3 — test: diverse suite del backend leggono file del monorepo
+# risalendo di tre livelli da src/, cioe' <repo>/. Sull'host funziona; nel
+# container il backend e' montato su /app, quindi quel calcolo produce "/" e i
+# test cercano /frontend, /Examples, /backend/package.json. I tre mount in sola
+# lettura qui sotto rimettono quei file dove i test li cercano.
+# L'applicazione non li usa: servono solo a `npm test`.
+#
 # Uso: docker compose -f docker-compose.dev.yml -f docker-compose.dev.override.yml up
 services:
   backend:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - backend_node_modules:/app/node_modules
+      - ./frontend:/frontend:ro
+      - ./Examples:/Examples:ro
+      - ./backend:/backend:ro
   frontend:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
